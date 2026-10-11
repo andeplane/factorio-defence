@@ -77,9 +77,9 @@ describe('game', () => {
     const level = { ...LEVELS[0], threats: { wear: { weight: 1, from: 1 } }, threatBudget: () => 3, startMoney: 1000 };
     const g = new Game(level, 3);
     const hub = g.offer.indexOf('data-fusion');
-    expect(g.buy(hub, [6, 7])).toBeNull();
+    expect(g.buy(hub, [0, 7])).toBeNull();
     g.offer.push('charts');
-    expect(g.buy(g.offer.indexOf('charts'), [5, 6])).toBeNull();
+    expect(g.buy(g.offer.indexOf('charts'), [3, 6])).toBeNull();
     g.runShift();
     const r = g.reports[0];
     expect(r.spawned.wear).toBe(1);
