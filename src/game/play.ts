@@ -175,7 +175,7 @@ class LevelScene {
       const y = c.y * TILE_PX;
       if (c.state === 'work') g.circle(x, y, 10 + 4 * pulse).stroke({ color: 0xffa726, width: 2, alpha: 0.8 });
       g.circle(x, y, 7).fill({ color: 0xffa726 }).stroke({ color: 0x1b1b1b, width: 2 });
-      this.label(c.name, c.x, c.y + 18 / TILE_PX, 0xffe0b2, 11);
+      this.label(c.name, c.x, c.y + 20 / TILE_PX, 0xfff3e0, 13);
     }
   }
 
@@ -324,7 +324,7 @@ export async function startGame(parent: HTMLElement): Promise<void> {
     const phase = g.phase === 'shift' ? `Shift ${Math.ceil((g.shiftTicks - g.shiftTick) / 60)}s left` : 'Between shifts';
     hud.innerHTML =
       `<b>${g.level.name}</b> · Round ${g.round}/${g.level.rounds} · ${phase}` +
-      `<br>Money <b>$${Math.floor(g.money)}</b> · Missed orders <span class="strikes">${strikes}</span> · Crews ${g.crews.length}`;
+      `<br>Money <b>$${Math.floor(g.money)}</b> · Missed orders <span class="strikes">${strikes}</span> · Crew: ${g.crews.map((c) => c.name).join(', ')}`;
     const rows = g.orders
       .map((o) => {
         const got = g.phase === 'shift' ? g.deliveredThisShift(o.item) : 0;
