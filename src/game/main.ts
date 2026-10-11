@@ -2,10 +2,13 @@ import { Container } from 'pixi.js';
 import { TILE_PX } from '../engine/Camera';
 import { Engine } from '../engine/Engine';
 import { footprint, layerKeys, prototypeKeys, rotate, type Direction, type EntityPrototype } from '../engine/Entities';
+import { EMPTY_FACTORY_STATE, FactoryView, factoryViewKeys } from '../engine/FactoryView';
 import { orientationOf, SpriteStack } from '../engine/SpriteStack';
 import { valueNoise } from '../engine/TileMap';
 import { unitKeys } from '../engine/Units';
-import { PROTOTYPES, TILE_NAMES, UNITS } from './prototypes';
+import { beltCurveFrom } from './belts';
+import { buildGearLine } from './demoLine';
+import { ITEM_NAMES, PROTOTYPES, TILE_NAMES, UNITS } from './prototypes';
 
 const engine = new Engine();
 
@@ -18,34 +21,39 @@ function generateTile(x: number, y: number): number {
 
 const proto = (name: string) => PROTOTYPES.find((p) => p.name === name)!;
 
-function buildDemo(): void {
+/** Where the older showcase (belt loop, turrets, roaming biters) sits, west of the production line. */
+const SHOWCASE: [number, number] = [-45, 4];
+
+function buildShowcase(): void {
+  const [sx, sy] = SHOWCASE;
   const belt = proto('transport-belt');
   const assembler = proto('assembling-machine-1');
   const radar = proto('radar');
   const chest = proto('wooden-chest');
-  const e = engine.entities;
+  const at = (p: EntityPrototype, x: number, y: number, dir: Direction = 'north') => engine.entities.place(p, sx + x, sy + y, dir);
   // A rectangular belt loop running clockwise.
-  for (let x = -8; x < 8; x++) e.place(belt, x, -4, 'east');
-  for (let y = -4; y < 4; y++) e.place(belt, 8, y, 'south');
-  for (let x = 8; x > -8; x--) e.place(belt, x, 4, 'west');
-  for (let y = 4; y > -4; y--) e.place(belt, -8, y, 'north');
-  for (let i = 0; i < 4; i++) e.place(assembler, -7 + i * 4, -2, 'north');
-  e.place(radar, -2, 6, 'north');
-  e.place(chest, 9, -5, 'north');
-  e.place(chest, 9, 5, 'north');
-  e.place(proto('pumpjack'), -14, -6, 'north');
-  e.place(proto('pumpjack'), -14, 2, 'north');
-  for (const [x, y] of [[12, -8], [12, 6], [-4, 10], [-4, -10]]) e.place(proto('gun-turret'), x, y, 'north');
+  for (let x = -8; x < 8; x++) at(belt, x, -4, 'east');
+  for (let y = -4; y < 4; y++) at(belt, 8, y, 'south');
+  for (let x = 8; x > -8; x--) at(belt, x, 4, 'west');
+  for (let y = 4; y > -4; y--) at(belt, -8, y, 'north');
+  for (let i = 0; i < 4; i++) at(assembler, -7 + i * 4, -2);
+  at(radar, -2, 6);
+  at(chest, 9, -5);
+  at(chest, 9, 5);
+  at(proto('pumpjack'), -14, -6);
+  at(proto('pumpjack'), -14, 2);
+  for (const [x, y] of [[12, -8], [12, 6], [-4, 10], [-4, -10]]) at(proto('gun-turret'), x, y);
 
   for (let i = 0; i < 14; i++) {
     const a = (i / 14) * Math.PI * 2;
     const r = 22 + (i % 3) * 4;
-    engine.units.spawn(i % 4 === 0 ? UNITS.mediumBiter : UNITS.smallBiter, Math.cos(a) * r, Math.sin(a) * r);
+    engine.units.spawn(i % 4 === 0 ? UNITS.mediumBiter : UNITS.smallBiter, sx + Math.cos(a) * r, sy + Math.sin(a) * r);
   }
 }
 
 /** Demo behaviour: biters roam a ring around the base, turrets track the nearest one in range. */
-function runDemo(): void {
+function runShowcase(): void {
+  const [sx, sy] = SHOWCASE;
   let seed = 1;
   const rand = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
   const turrets = [...engine.entities.all()].filter((e) => e.proto.name === 'gun-turret');
@@ -55,7 +63,7 @@ function runDemo(): void {
       if (!u.target && rand() < 0.02) {
         const a = rand() * Math.PI * 2;
         const r = 14 + rand() * 16;
-        u.target = { x: Math.cos(a) * r, y: Math.sin(a) * r };
+        u.target = { x: sx + Math.cos(a) * r, y: sy + Math.sin(a) * r };
       }
     }
     if (tick % 4) return;
@@ -108,10 +116,25 @@ async function start(): Promise<void> {
     parent: document.getElementById('app')!,
     tileNames: TILE_NAMES,
     generateTile,
-    animationKeys: [...PROTOTYPES.flatMap(prototypeKeys), ...Object.values(UNITS).flatMap(unitKeys)],
+    animationKeys: [
+      ...PROTOTYPES.flatMap(prototypeKeys),
+      ...Object.values(UNITS).flatMap(unitKeys),
+      ...factoryViewKeys(ITEM_NAMES),
+    ],
   });
-  buildDemo();
-  runDemo();
+  buildShowcase();
+  runShowcase();
+
+  // The production line, drawn from a plain state snapshot. A visual-only driver feeds it for now.
+  const factoryView = new FactoryView(engine.assets, engine.entities, engine.itemLayer, engine.highLayer, (belt) =>
+    beltCurveFrom(belt, engine.entities),
+  );
+  const lineState = buildGearLine(engine.entities, proto, -2, -4);
+  let factoryState = EMPTY_FACTORY_STATE;
+  engine.onTick((tick) => (factoryState = lineState(tick)));
+  engine.onFrame(() => factoryView.render(factoryState));
+  engine.camera.x = 10 * TILE_PX;
+  engine.camera.y = 0;
 
   const ghost = new Ghost();
   engine.overlay.addChild(ghost.view);

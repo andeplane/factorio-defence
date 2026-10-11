@@ -354,6 +354,199 @@ function directional(prefix: string, count: number, build: (d: number, n: number
   return Object.fromEntries(Array.from({ length: count }, (_, d) => [`${prefix}/${d}`, () => build(d, count)]));
 }
 
+function stoneFurnace(): PlaceholderAnimation {
+  const size = PX * 2;
+  const canvas = sheet(size, size, 1, 1, (ctx) => {
+    ctx.fillStyle = '#7d7466';
+    ctx.beginPath();
+    ctx.moveTo(8, size - 4);
+    ctx.lineTo(12, 8);
+    ctx.lineTo(size - 12, 8);
+    ctx.lineTo(size - 8, size - 4);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = '#4a443a';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    // Stone courses
+    ctx.strokeStyle = 'rgba(60, 54, 45, 0.6)';
+    ctx.lineWidth = 1;
+    for (const y of [20, 32, 44]) {
+      ctx.beginPath();
+      ctx.moveTo(11, y);
+      ctx.lineTo(size - 11, y);
+      ctx.stroke();
+    }
+    // Fire mouth
+    ctx.fillStyle = '#241f1a';
+    ctx.beginPath();
+    ctx.arc(size / 2, size - 14, 9, Math.PI, 0);
+    ctx.lineTo(size / 2 + 9, size - 5);
+    ctx.lineTo(size / 2 - 9, size - 5);
+    ctx.fill();
+  });
+  return { canvas, def: { file: 'placeholder', width: size, height: size } };
+}
+
+function furnaceFire(): PlaceholderAnimation {
+  const frames = 12;
+  const size = PX;
+  const canvas = sheet(size, size, frames, frames, (ctx, f) => {
+    const flick = Math.sin((f / frames) * Math.PI * 2);
+    const g = ctx.createRadialGradient(size / 2, size * 0.7, 1, size / 2, size * 0.7, 10 + flick * 2);
+    g.addColorStop(0, 'rgba(255, 240, 160, 1)');
+    g.addColorStop(0.5, 'rgba(255, 140, 30, 0.9)');
+    g.addColorStop(1, 'rgba(255, 60, 0, 0)');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.ellipse(size / 2, size * 0.68, 8, 7 + flick, 0, 0, Math.PI * 2);
+    ctx.fill();
+  });
+  // Sits in the furnace mouth: 0.6 tiles below the 2x2 furnace's centre.
+  return { canvas, def: { file: 'placeholder', width: size, height: size, frameCount: frames, animationSpeed: 0.4, shift: [0, 0.35], additive: true } };
+}
+
+function miningDrill(direction: string): PlaceholderAnimation {
+  const frames = 16;
+  const size = PX * 3;
+  const canvas = sheet(size, size, frames, 8, (ctx, f) => {
+    ctx.fillStyle = '#5d6152';
+    ctx.fillRect(4, 4, size - 8, size - 8);
+    ctx.strokeStyle = '#2d2f28';
+    ctx.lineWidth = 3;
+    ctx.strokeRect(5.5, 5.5, size - 11, size - 11);
+    // Output chute on the output side
+    ctx.save();
+    ctx.translate(size / 2, size / 2);
+    ctx.rotate(DIR_ANGLE[direction] + Math.PI / 2);
+    ctx.fillStyle = '#c48a1e';
+    ctx.fillRect(-7, -size / 2 + 2, 14, 12);
+    ctx.restore();
+    // Spinning drill head
+    ctx.save();
+    ctx.translate(size / 2, size / 2);
+    ctx.rotate((f / frames) * Math.PI * 2);
+    ctx.fillStyle = '#9fa39a';
+    for (let i = 0; i < 3; i++) {
+      ctx.rotate((Math.PI * 2) / 3);
+      ctx.fillRect(-3, 0, 6, 22);
+    }
+    ctx.fillStyle = '#2b2b2b';
+    ctx.beginPath();
+    ctx.arc(0, 0, 6, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  });
+  return { canvas, def: { file: 'placeholder', width: size, height: size, frameCount: frames, lineLength: 8, animationSpeed: 0.5 } };
+}
+
+function inserterPlatform(direction: string): PlaceholderAnimation {
+  const canvas = sheet(PX, PX, 1, 1, (ctx) => {
+    ctx.fillStyle = '#4c4a44';
+    ctx.fillRect(7, 7, PX - 14, PX - 14);
+    ctx.strokeStyle = '#26241f';
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(7.5, 7.5, PX - 15, PX - 15);
+    // Notch pointing to the drop side
+    ctx.translate(PX / 2, PX / 2);
+    ctx.rotate(DIR_ANGLE[direction]);
+    ctx.fillStyle = '#c9a227';
+    ctx.beginPath();
+    ctx.moveTo(9, 0);
+    ctx.lineTo(4, -4);
+    ctx.lineTo(4, 4);
+    ctx.fill();
+  });
+  return { canvas, def: { file: 'placeholder', width: PX, height: PX } };
+}
+
+/** Arm segment, drawn pointing down from its anchor at the top centre. */
+function inserterHandBase(): PlaceholderAnimation {
+  const canvas = sheet(8, PX, 1, 1, (ctx) => {
+    ctx.fillStyle = '#d8a833';
+    ctx.fillRect(2, 0, 4, PX);
+    ctx.fillStyle = '#7a5d16';
+    ctx.fillRect(2, 0, 1, PX);
+  });
+  return { canvas, def: { file: 'placeholder', width: 8, height: PX } };
+}
+
+/** Claw, drawn pointing down (away from the inserter). */
+function inserterHand(open: boolean): PlaceholderAnimation {
+  const canvas = sheet(16, 16, 1, 1, (ctx) => {
+    ctx.strokeStyle = '#3a3a3a';
+    ctx.lineWidth = 2.5;
+    const spread = open ? 6 : 3;
+    for (const side of [-1, 1]) {
+      ctx.beginPath();
+      ctx.moveTo(8, 3);
+      ctx.lineTo(8 + side * spread, 9);
+      ctx.lineTo(8 + side * (spread - 2), 14);
+      ctx.stroke();
+    }
+    ctx.fillStyle = '#d8a833';
+    ctx.beginPath();
+    ctx.arc(8, 4, 3, 0, Math.PI * 2);
+    ctx.fill();
+  });
+  return { canvas, def: { file: 'placeholder', width: 16, height: 16 } };
+}
+
+const ICON_SIZE = 32;
+
+function icon(draw: (ctx: CanvasRenderingContext2D) => void): () => PlaceholderAnimation {
+  return () => ({ canvas: sheet(ICON_SIZE, ICON_SIZE, 1, 1, draw), def: { file: 'placeholder', width: ICON_SIZE, height: ICON_SIZE } });
+}
+
+function oreIcon(light: string, dark: string) {
+  return icon((ctx) => {
+    for (const [x, y, r] of [[11, 18, 8], [21, 14, 7], [19, 23, 6]]) {
+      ctx.fillStyle = dark;
+      ctx.beginPath();
+      ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = light;
+      ctx.beginPath();
+      ctx.arc(x - 2, y - 2, r * 0.5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  });
+}
+
+function plateIcon(top: string, side: string) {
+  return icon((ctx) => {
+    ctx.fillStyle = side;
+    ctx.fillRect(4, 12, 24, 12);
+    ctx.fillStyle = top;
+    ctx.beginPath();
+    ctx.moveTo(4, 12);
+    ctx.lineTo(10, 6);
+    ctx.lineTo(28, 6);
+    ctx.lineTo(28, 18);
+    ctx.lineTo(28, 12);
+    ctx.lineTo(22, 18);
+    ctx.lineTo(4, 18);
+    ctx.closePath();
+    ctx.fill();
+  });
+}
+
+const ICONS: Record<string, () => PlaceholderAnimation> = {
+  'icon/iron-ore': oreIcon('#a9b6c4', '#56606c'),
+  'icon/copper-ore': oreIcon('#e2a070', '#8a4a2a'),
+  'icon/iron-plate': plateIcon('#c9ced3', '#8a9097'),
+  'icon/copper-plate': plateIcon('#e8a57a', '#a8613c'),
+  'icon/iron-gear-wheel': icon((ctx) => gear(ctx, 16, 16, 13, 9, 0, '#a7adb3')),
+  'icon/copper-cable': icon((ctx) => {
+    ctx.strokeStyle = '#d98a52';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(4, 24);
+    ctx.bezierCurveTo(10, 4, 22, 28, 28, 8);
+    ctx.stroke();
+  }),
+};
+
 /** Builders for every animation key the game references. */
 const ANIMATIONS: Record<string, () => PlaceholderAnimation> = {
   'transport-belt/north': () => belt('north'),
@@ -372,6 +565,14 @@ const ANIMATIONS: Record<string, () => PlaceholderAnimation> = {
   radar,
   'radar/shadow': () => shadow(3, 3, 0.5),
   'wooden-chest': chest,
+  ...ICONS,
+  'stone-furnace': stoneFurnace,
+  'stone-furnace/fire': furnaceFire,
+  ...Object.fromEntries(['north', 'east', 'south', 'west'].map((d) => [`electric-mining-drill/${d}`, () => miningDrill(d)])),
+  ...Object.fromEntries(['north', 'east', 'south', 'west'].map((d) => [`inserter/platform/${d}`, () => inserterPlatform(d)])),
+  'inserter/hand_base': inserterHandBase,
+  'inserter/hand_open': () => inserterHand(true),
+  'inserter/hand_closed': () => inserterHand(false),
   pumpjack: pumpjackBase,
   'pumpjack/north': pumpjackHorsehead,
   'gun-turret': turretBase,

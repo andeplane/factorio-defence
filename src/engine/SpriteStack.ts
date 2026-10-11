@@ -28,6 +28,8 @@ interface StackLayer {
   anims: (Animation | null)[];
   sprite: Sprite;
   current: Animation | null;
+  /** Only drawn while the owner is working (e.g. a furnace's fire). */
+  workingOnly: boolean;
 }
 
 /**
@@ -48,6 +50,7 @@ export class SpriteStack {
     directionCount: number,
     shadowParent: Container | null,
     private objectParent: Container,
+    workingKeys: ReadonlySet<string> = new Set(),
   ) {
     for (const key of keys) {
       const anims = expandKey(key, directionCount).map((k) => assets.animation(k));
@@ -57,7 +60,7 @@ export class SpriteStack {
       const sprite = new Sprite(first.frames[0]);
       sprite.anchor.set(0.5);
       (first.def.drawAsShadow ? shadowParent! : objectParent).addChild(sprite);
-      this.layers.push({ anims, sprite, current: null });
+      this.layers.push({ anims, sprite, current: null, workingOnly: workingKeys.has(key) });
     }
   }
 
@@ -69,12 +72,13 @@ export class SpriteStack {
     for (const l of this.layers) if (l.current) this.place(l, l.current);
   }
 
-  update(tick: number, orientation = 0): void {
+  update(tick: number, orientation = 0, working = true): void {
     for (const l of this.layers) {
       const anim = l.anims.length > 1 ? l.anims[directionIndex(orientation, l.anims.length)] : l.anims[0];
+      if (l.workingOnly) l.sprite.visible = anim !== null && working;
       if (anim !== l.current) {
         l.current = anim;
-        l.sprite.visible = anim !== null;
+        l.sprite.visible = anim !== null && (!l.workingOnly || working);
         if (anim) this.place(l, anim);
       } else if (!anim || anim.frames.length <= 1) {
         continue;
