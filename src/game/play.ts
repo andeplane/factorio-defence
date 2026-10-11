@@ -285,7 +285,13 @@ export async function startGame(parent: HTMLElement): Promise<void> {
     const fit = Math.min(camera.viewWidth / ((b.maxX - b.minX + 8) * TILE_PX), (camera.viewHeight - 260) / ((b.maxY - b.minY + 6) * TILE_PX));
     camera.zoomAt(Math.max(0.3, Math.min(1.5, fit)) / camera.zoom, camera.viewWidth / 2, camera.viewHeight / 2);
     const stage = level.stages[0];
-    showModal(`${level.name}`, `<p>${level.text}</p><p><b>${stage.title}.</b> ${stage.text}</p>`, 'Start');
+    const howTo =
+      LEVELS.indexOf(level) === 0
+        ? `<p>Each round is a shift. Deliver the order to the dock before the shift ends. Miss three orders and the level is lost.</p>` +
+          `<p>Problems will hit your machines, belts and inserters. Crews only fix what someone has noticed. ` +
+          `Between shifts, buy Cognite cards to see problems sooner and fix them faster. The grey haze is equipment nobody has data on.</p>`
+        : '';
+    showModal(`${level.name}`, `<p>${level.text}</p>${howTo}<p><b>${stage.title}.</b> ${stage.text}</p>`, 'Start');
     renderShop();
   }
 
@@ -422,6 +428,7 @@ export async function startGame(parent: HTMLElement): Promise<void> {
       `${r.detectedEarly} problems caught early, ${r.breakdowns} breakdowns`,
     ];
     if (r.offSpecDelivered) lines.push(`${r.offSpecDelivered} off-spec items shipped and rejected`);
+    if (r.hidden) lines.push(`<span class="warn">${r.hidden} problem${r.hidden === 1 ? ' is' : 's are'} still hidden somewhere in the plant</span>`);
     return `<ul>${rows}</ul><p>${lines.join('<br>')}</p>`;
   }
 

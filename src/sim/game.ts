@@ -77,6 +77,8 @@ export interface ShiftReport {
   detectedEarly: number;
   breakdowns: number;
   offSpecDelivered: number;
+  /** Problems still open and unnoticed when the shift ended. */
+  hidden: number;
 }
 
 /** Cards that help against each threat, used to make sure a new threat comes with an answer. */
@@ -671,6 +673,7 @@ export class Game {
       detectedEarly: this.detectedEarly,
       breakdowns: this.breakdowns,
       offSpecDelivered: offSpec,
+      hidden: this.openProblems().filter((p) => p.detected === null).length,
     });
     // Fixed problems are history now.
     const open = this.openProblems();
