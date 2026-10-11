@@ -43,6 +43,8 @@ export interface AnimationDef {
    * greyscale mask layers of biters and turrets.
    */
   tint?: { r: number; g: number; b: number; a?: number } | number[];
+  /** Playback order as 1-based frame indices (Factorio `frame_sequence`), e.g. a drill head's dig loop. */
+  frameSequence?: number[];
 }
 
 export interface TileDef {
@@ -107,6 +109,8 @@ export function frameAt(def: AnimationDef, tick: number): number {
   const count = def.frameCount ?? 1;
   if (count <= 1) return 0;
   const step = Math.floor(tick * (def.animationSpeed ?? 1));
+  const seq = def.frameSequence;
+  if (seq?.length) return Math.min(count - 1, Math.max(0, seq[step % seq.length] - 1));
   switch (def.runMode) {
     case 'backward':
       return count - 1 - (step % count);

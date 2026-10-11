@@ -148,6 +148,34 @@ for k in ("radar", "radar/shadow"):
     e = out[k]; n = e.pop("directionCount", 1)
     e["frameCount"], e["animationSpeed"] = n, round(rs * n, 4)
 
+# Friendly aliases for the keys the game asks for.
+def alias(new, old):
+    if old in out: out.setdefault(new, out[old])
+
+alias("stone-furnace/fire", "stone-furnace/working_visualisations/0/animation")
+alias("stone-furnace/fire/light", "stone-furnace/working_visualisations/0/animation/2")
+alias("stone-furnace/ground_light", "stone-furnace/working_visualisations/1/animation")
+alias("steel-furnace/fire", "steel-furnace/working_visualisations/0/animation")
+for drill in ("electric-mining-drill",):
+    for d in DIRS:
+        alias(f"{drill}/{d}", f"{drill}/animation/{d}")                 # static body, output facing d
+        alias(f"{drill}/{d}/shadow", f"{drill}/animation/{d}/shadow")
+        alias(f"{drill}/{d}/output", f"{drill}/animation/{d}/2")         # animated output chute
+        alias(f"{drill}/{d}/drill", f"{drill}/working_visualisations/2/{d}_animation")  # moving drill head
+        alias(f"{drill}/{d}/drill/shadow", f"{drill}/working_visualisations/2/{d}_animation/shadow")
+# Inserters: the platform sheet holds the entity directions north, east, south,
+# west. An inserter's direction is its pickup side, so the side it drops to is
+# the opposite one; platform/<d> is keyed by the drop side.
+OPPOSITE = {"north": "south", "east": "west", "south": "north", "west": "east"}
+for name in P.get("inserter", {}):
+    plat = out.get(name)
+    if plat:
+        for drop in DIRS:
+            out.setdefault(f"{name}/platform/{drop}", dict(plat, x=DIRS.index(OPPOSITE[drop]) * plat["width"]))
+    for part in ("hand_base", "hand_open", "hand_closed"):
+        alias(f"{name}/{part}", f"{name}/{part}_picture")
+        alias(f"{name}/{part}/shadow", f"{name}/{part}_shadow")
+
 # Icons: items first, then fluids, entities, recipes
 for t in ["item", "ammo", "gun", "capsule", "module", "tool", "fluid", "item-group"] + ENTITY_TYPES + ["recipe"]:
     for name, p in sorted(P.get(t, {}).items()):

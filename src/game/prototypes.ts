@@ -15,6 +15,8 @@ export const PROTOTYPES: EntityPrototype[] = [
     },
     connectedLayers: beltLayers,
     extraKeys: BELT_CURVE_KEYS,
+    renderLayer: 'ground',
+    syncAnimation: true,
   },
   {
     name: 'assembling-machine-1',
@@ -36,7 +38,39 @@ export const PROTOTYPES: EntityPrototype[] = [
   },
 ];
 
+const perDirection = (f: (d: string) => string[]) =>
+  ({ north: f('north'), east: f('east'), south: f('south'), west: f('west') });
+
 PROTOTYPES.push(
+  {
+    name: 'inserter',
+    size: [1, 1],
+    rotatable: true,
+    // Direction is the side the inserter drops to.
+    layers: perDirection((d) => [`inserter/platform/${d}`]),
+  },
+  {
+    name: 'stone-furnace',
+    size: [2, 2],
+    rotatable: false,
+    layers: ['stone-furnace/shadow', 'stone-furnace'],
+    workingLayers: ['stone-furnace/fire', 'stone-furnace/fire/light', 'stone-furnace/ground_light'],
+  },
+  {
+    name: 'electric-mining-drill',
+    size: [3, 3],
+    rotatable: true,
+    // Direction is the side the drill outputs to.
+    // The body is only the frame; the head and output chute are separate animated layers.
+    layers: perDirection((d) => [
+      `electric-mining-drill/${d}/shadow`,
+      `electric-mining-drill/${d}/drill/shadow`,
+      `electric-mining-drill/${d}`,
+      `electric-mining-drill/${d}/drill`,
+      // Factorio 1.1 has no output chute for a south-facing drill.
+      ...(d === 'south' ? [] : [`electric-mining-drill/${d}/output`]),
+    ]),
+  },
   {
     name: 'pumpjack',
     size: [3, 3],
@@ -71,5 +105,8 @@ export const UNITS = {
   smallBiter: biter('small-biter', 0.05),
   mediumBiter: biter('medium-biter', 0.04),
 };
+
+/** Items the views may draw (icons are preloaded for these). */
+export const ITEM_NAMES = ['iron-ore', 'iron-plate', 'iron-gear-wheel', 'copper-ore', 'copper-plate', 'copper-cable'];
 
 export const TILE_NAMES = ['grass-1', 'dirt-1', 'sand-1'];

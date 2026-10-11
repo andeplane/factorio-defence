@@ -23,12 +23,22 @@ export interface EntityPrototype {
    */
   layers: string[] | Record<Direction, string[]>;
   directionCount?: number;
+  /** Layers only drawn while the entity is working, e.g. a furnace's fire. */
+  workingLayers?: string[];
+  /**
+   * Animate on the shared tick so every instance stays in step, like
+   * Factorio's belts. Otherwise each entity keeps its own clock, which
+   * pauses (instead of resetting) while it is not working.
+   */
+  syncAnimation?: boolean;
   /**
    * Picks layers from the surroundings (e.g. belt curves). Re-evaluated when
    * the entity or one of its neighbours is placed or removed. Falls back to
    * `layers` when it returns undefined.
    */
   connectedLayers?: (e: Entity, world: EntityManager) => string[] | undefined;
+  /** 'ground' draws under shadows and other entities (belts). Default 'object'. */
+  renderLayer?: 'ground' | 'object';
   /** Every animation key this prototype may use, for preloading. */
   extraKeys?: string[];
 }
@@ -36,7 +46,7 @@ export interface EntityPrototype {
 /** All animation keys a prototype can show, for `AssetStore.preload`. */
 export function prototypeKeys(proto: EntityPrototype): string[] {
   const base = Array.isArray(proto.layers) ? proto.layers : Object.values(proto.layers).flat();
-  const keys = [...base, ...(proto.extraKeys ?? [])].flatMap((k) => expandKey(k, proto.directionCount ?? 1));
+  const keys = [...base, ...(proto.workingLayers ?? []), ...(proto.extraKeys ?? [])].flatMap((k) => expandKey(k, proto.directionCount ?? 1));
   return [...new Set(keys)];
 }
 
@@ -47,6 +57,8 @@ export class Entity {
   working = true;
   /** Turns, 0 = north, clockwise. Selects the frame set of `{dir}` layers. */
   orientation = 0;
+  /** Ticks this entity has spent working; drives its animation frame. */
+  animTick = 0;
 
   constructor(
     readonly id: number,
@@ -79,18 +91,28 @@ export function layerKeys(proto: EntityPrototype, dir: Direction): string[] {
  * shadow layer and a y-sorted object layer, and synchronized animation.
  */
 export class EntityManager {
+  /** Flat things under everything else, like Factorio's belts. */
+  readonly groundLayer = new Container();
   readonly shadowLayer = new Container();
   readonly objectLayer = new Container();
+  private listeners: ((e: Entity, change: 'placed' | 'removed') => void)[] = [];
   private entities = new Map<number, Entity>();
   private occupancy = new Map<string, number>();
   private nextId = 1;
+  private lastTick = 0;
 
   constructor(private assets: AssetStore) {
     // Shadows are drawn as one flat layer under all objects, like Factorio.
+    this.groundLayer.label = 'ground-entities';
     this.shadowLayer.label = 'shadows';
     this.shadowLayer.alpha = 0.6;
     this.objectLayer.label = 'entities';
     this.objectLayer.sortableChildren = true;
+  }
+
+  /** Called after an entity is placed or removed (simulations mirror the layout this way). */
+  onChange(fn: (e: Entity, change: 'placed' | 'removed') => void): void {
+    this.listeners.push(fn);
   }
 
   get count(): number {
@@ -123,6 +145,7 @@ export class EntityManager {
     this.entities.set(e.id, e);
     this.refresh(e);
     this.refreshNeighbours(e);
+    for (const fn of this.listeners) fn(e, 'placed');
     return e;
   }
 
@@ -134,6 +157,7 @@ export class EntityManager {
     }
     this.entities.delete(e.id);
     this.refreshNeighbours(e);
+    for (const fn of this.listeners) fn(e, 'removed');
   }
 
   /** Rebuilds an entity's sprites if its (possibly connection-dependent) layers changed. */
@@ -142,7 +166,15 @@ export class EntityManager {
     if (keys.length === e.layerKeys.length && keys.every((k, i) => k === e.layerKeys[i])) return;
     e.stack?.destroy();
     e.layerKeys = keys;
-    e.stack = new SpriteStack(this.assets, keys, e.proto.directionCount ?? 1, this.shadowLayer, this.objectLayer);
+    const ground = e.proto.renderLayer === 'ground';
+    e.stack = new SpriteStack(
+      this.assets,
+      [...keys, ...(e.proto.workingLayers ?? [])],
+      e.proto.directionCount ?? 1,
+      this.shadowLayer,
+      ground ? this.groundLayer : this.objectLayer,
+      new Set(e.proto.workingLayers),
+    );
     // Sort by the entity's bottom edge so taller things overlap correctly.
     e.stack.setPosition((e.x + e.width / 2) * TILE_PX, (e.y + e.height / 2) * TILE_PX, e.y + e.height);
   }
@@ -168,7 +200,13 @@ export class EntityManager {
 
   /** Advance every animation to game tick `tick`. All belts stay in sync, like Factorio. */
   animate(tick: number): void {
-    for (const e of this.entities.values()) e.stack?.update(e.working ? tick : 0, e.orientation);
+    const dt = tick - this.lastTick;
+    this.lastTick = tick;
+    for (const e of this.entities.values()) {
+      if (e.working) e.animTick += dt;
+      const t = e.proto.syncAnimation ? tick : e.animTick;
+      e.stack?.update(t, e.orientation, e.working);
+    }
   }
 }
 

@@ -25,6 +25,10 @@ export class Engine {
   readonly assets = new AssetStore();
   readonly camera = new Camera();
   readonly world = new Container();
+  /** Items lying on belts: above belts, under shadows and machines. */
+  readonly itemLayer = new Container();
+  /** Above machines, like Factorio's inserter arms and the items in their hands. */
+  readonly highLayer = new Container();
   /** Drawn above entities in world space: cursor ghosts, selection boxes. */
   readonly overlay = new Container();
   tiles!: TileMap;
@@ -52,7 +56,15 @@ export class Engine {
     this.tiles = new TileMap(this.assets, opts.tileNames, opts.generateTile);
     this.entities = new EntityManager(this.assets);
     this.units = new UnitManager(this.assets, this.entities.shadowLayer, this.entities.objectLayer);
-    this.world.addChild(this.tiles.container, this.entities.shadowLayer, this.entities.objectLayer, this.overlay);
+    this.world.addChild(
+      this.tiles.container,
+      this.entities.groundLayer,
+      this.itemLayer,
+      this.entities.shadowLayer,
+      this.entities.objectLayer,
+      this.highLayer,
+      this.overlay,
+    );
     this.app.stage.addChild(this.world);
 
     this.app.ticker.add((t) => this.frame(t.deltaMS));

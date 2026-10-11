@@ -12,7 +12,7 @@ npm test
 npm run build
 ```
 
-Controls: WASD or drag to pan, mouse wheel to zoom, 1-6 to pick an entity,
+Controls: WASD or drag to pan, mouse wheel to zoom, 1-9 to pick an entity,
 R to rotate, left click to place, right click to remove, Q to clear the cursor.
 
 ## Engine
@@ -25,6 +25,9 @@ TypeScript + [PixiJS 8](https://pixijs.com) (WebGL) + Vite.
   sprites, a shadow layer, y-sorting and synchronized animation.
 - `src/engine/Assets.ts` + `manifest.ts` load Factorio-style spritesheets
   from a manifest, falling back to `placeholders.ts`.
+- `src/engine/FactoryView.ts` draws a running factory from a plain
+  `FactoryViewState` snapshot (items on belt lanes, inserter swing and held
+  item, machines' working flags), so a headless simulation can drive it.
 - `src/engine/Engine.ts` fixed 60 ticks/s game loop, like Factorio.
 - `src/game/` the current demo scene and entity prototypes.
 

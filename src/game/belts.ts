@@ -10,9 +10,10 @@ export const BELT_CURVE_KEYS = DIRECTIONS.flatMap((from) =>
 /**
  * Factorio's belt shape rule: a belt curves when nothing feeds it from
  * behind and exactly one belt feeds it from a side. Otherwise it is straight
- * (two side inputs make a sideload).
+ * (two side inputs make a sideload). Returns the curve feeder's direction,
+ * i.e. the direction items move in when they enter, or undefined if straight.
  */
-export function beltLayers(e: Entity, world: EntityManager): string[] | undefined {
+export function beltCurveFrom(e: Entity, world: EntityManager): Direction | undefined {
   const name = e.proto.name;
   const feeds = (dir: Direction): Entity | undefined => {
     // The neighbour on the `dir` side feeds us if it is a belt pointing back at us.
@@ -24,5 +25,10 @@ export function beltLayers(e: Entity, world: EntityManager): string[] | undefine
   const left = feeds(rotate(e.direction, -1));
   const right = feeds(rotate(e.direction, 1));
   const side = left && !right ? left : right && !left ? right : undefined;
-  return side ? [`${name}/${side.direction}_to_${e.direction}`] : undefined;
+  return side?.direction;
+}
+
+export function beltLayers(e: Entity, world: EntityManager): string[] | undefined {
+  const from = beltCurveFrom(e, world);
+  return from ? [`${e.proto.name}/${from}_to_${e.direction}`] : undefined;
 }
