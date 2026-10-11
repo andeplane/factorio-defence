@@ -80,6 +80,8 @@ export class TileMap {
         s.position.set(tx * TILE_PX, ty * TILE_PX);
         s.width = TILE_PX;
         s.height = TILE_PX;
+        // Snap to whole screen pixels so fractional zooms don't open seams between tiles.
+        s.roundPixels = true;
         view.addChild(s);
       }
     }

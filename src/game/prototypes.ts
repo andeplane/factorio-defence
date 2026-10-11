@@ -49,7 +49,6 @@ PROTOTYPES.push(
     rotatable: false,
     directionCount: 64,
     layers: [
-      'gun-turret/shadow',
       'gun-turret',
       'gun-turret/2',
       'gun-turret/attacking_animation/shadow/dir/{dir}',

@@ -85,6 +85,15 @@ copied from `data/base/prototypes/entity/*.lua`. For 1.1 entities use the
 | `runMode` | forward | `forward`, `backward`, `forward-then-backward` |
 | `tint` | – | colour multiplied into the layer, `{r,g,b,a}` or `[r,g,b,a]`, 0-1 or 0-255 (masks) |
 
+### Tiles
+
+A tile entry is a row of `variants` square images, `size` px each, starting
+at `x`, `y`. Pre-slice each tile's variant row into its own image (e.g.
+`tiles/grass-1.png`) rather than pointing into Factorio's terrain sheets:
+with linear filtering, the GPU samples a little past each variant's edge, so
+neighbouring rows or transparent padding in a shared sheet bleed in and show
+up as seams between tiles.
+
 ### Directional layers
 
 Sheets with several directions (units, turret guns) are split into one key
@@ -100,8 +109,7 @@ Mask layers (`/2`, `/3`) are greyscale and get their colour from `tint`.
 (e.g. `transport-belt/east_to_north`: moving east, turning north, as in
 `transport-belt-pictures.lua`), `assembling-machine-1`, `assembling-machine-1/shadow`,
 `radar`, `radar/shadow`, `wooden-chest`, `pumpjack`, `pumpjack/shadow`,
-`pumpjack/north`, `pumpjack/north/shadow`, `gun-turret`, `gun-turret/shadow`,
-`gun-turret/2`, `gun-turret/attacking_animation[/shadow|/2]/dir/{0-63}`,
+`pumpjack/north`, `pumpjack/north/shadow`, `gun-turret`, `gun-turret/2`, `gun-turret/attacking_animation[/shadow|/2]/dir/{0-63}`,
 `small-biter[/shadow|/2|/3]/dir/{0-15}` and the same for `medium-biter`;
 tiles `grass-1`, `dirt-1`, `sand-1`. Layers that are neither in the manifest
 nor have a placeholder are skipped and listed in one console warning.
