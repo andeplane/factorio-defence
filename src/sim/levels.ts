@@ -1,375 +1,463 @@
+import { assembler, copperSmelter, ironSmelter } from './blocks';
+import type { CardId } from './cards';
 import type { LevelDef } from './level';
 
-/**
- * Level 1: iron gears, then copper cable on the other side of the same belts, then red science.
- *
- *   y=0   iron and copper ore belt (iron on the south lane, copper on the north lane)
- *   y=2   furnaces, fed from the ore belt and emptied onto the plate belt
- *   y=5   plate belt (iron south lane, copper north lane), ends at the dock
- *   y=7   gear, cable and science assemblers
- *   y=11  product belt (gears south lane, cable north lane), ends at the dock
- */
-export const GEAR_WORKS: LevelDef = {
-  id: 'gear-works',
-  name: 'Gear Works',
-  text: 'A small smelting line making iron gears. Keep the gears flowing as the line grows.',
-  rounds: 8,
-  shiftSeconds: 90,
-  startMoney: 120,
-  crews: 1,
-  depot: [4, 9],
-  cards: ['crew', 'data-fusion', 'extractor', 'charts', 'asset-data-insights', 'infield', 'inrobot', 'canvas', 'flows'],
-  build(w) {
-    const ore = w.belt([
-      [0, 0],
-      [16, 0],
-    ]);
-    w.source('iron-ore', 1.3, -2, 0, ore, 0, 1);
-    w.source('copper-ore', 0.7, -2, -2, ore, 0, 0, 2);
-    for (const x of [0, 2, 4, 6]) {
-      w.furnace('iron-plate', x, 2);
-      w.inserter(x, 1, 'south');
-      w.inserter(x, 4, 'south');
-    }
-    for (const x of [8, 10]) {
-      w.furnace('copper-plate', x, 2, 2);
-      w.inserter(x, 1, 'south', 2);
-      w.inserter(x, 4, 'south', 2, 0);
-    }
-    w.belt(
-      [
-        [0, 5],
-        [20, 5],
-      ],
-      { sink: true },
-    );
-    w.assembler('iron-gear-wheel', 10, 7);
-    w.inserter(10, 6, 'south');
-    w.inserter(12, 6, 'south');
-    w.inserter(11, 10, 'south');
-    w.assembler('copper-cable', 14, 7, 2);
-    w.inserter(15, 6, 'south', 2);
-    w.inserter(15, 10, 'south', 2, 0);
-    w.belt(
-      [
-        [8, 11],
-        [20, 11],
-      ],
-      { sink: true },
-    );
-    w.assembler('automation-science-pack', 18, 7, 3);
-    w.inserter(19, 6, 'south', 3);
-    w.inserter(19, 10, 'north', 3);
-    w.inserter(21, 8, 'east', 3);
-    w.belt(
-      [
-        [22, 8],
-        [22, 13],
-      ],
-      { sink: true, stage: 3 },
-    );
-  },
-  stages: [
-    {
-      round: 1,
-      title: 'Iron gears',
-      text: 'Four furnaces smelt iron ore, and an assembler turns the plates into gears.',
-      orders: [{ item: 'iron-gear-wheel', perShift: 34 }],
-    },
-    {
-      round: 4,
-      title: 'Copper cable',
-      text: 'Copper ore rides the other side of the belt. Two new furnaces and a cable assembler join the line.',
-      orders: [
-        { item: 'iron-gear-wheel', perShift: 30 },
-        { item: 'copper-cable', perShift: 44 },
-      ],
-    },
-    {
-      round: 7,
-      title: 'Red science',
-      text: 'Gears and copper plates combine into automation science packs.',
-      orders: [
-        { item: 'iron-gear-wheel', perShift: 22 },
-        { item: 'copper-cable', perShift: 36 },
-        { item: 'automation-science-pack', perShift: 6 },
-      ],
-    },
-  ],
-  threatBudget: (round) => 4 + round * 2.5,
-  threats: {
-    wear: { weight: 3, from: 1 },
-    clog: { weight: 2, from: 1 },
-    jam: { weight: 2, from: 2 },
-  },
-  events: [],
-};
+/** Cards unlock across the campaign, roughly one or two per level, next to the threat they answer. */
+const CARDS_BY_LEVEL: CardId[][] = [
+  ['crew', 'data-fusion', 'extractor', 'charts', 'flows'],
+  ['inrobot', 'infield'],
+  ['asset-data-insights', 'canvas'],
+  ['search'],
+  ['atlas-ai'],
+  ['maintain'],
+  ['simulators'],
+  [],
+  [],
+  [],
+];
+const cardsUpTo = (level: number): CardId[] => CARDS_BY_LEVEL.slice(0, level).flat();
 
-/**
- * Level 2: electronic circuits. Iron plates run along the top belt, copper plates along the bottom
- * one, and cable assemblers hand cable straight to circuit assemblers between them. Circuits ride
- * the far side of the copper belt to the dock.
- */
-export const CIRCUIT_PLANT: LevelDef = {
-  id: 'circuit-plant',
-  name: 'Circuit Plant',
-  text: 'Two smelting lines feed a row of cable and circuit assemblers. Hidden sensor faults start to appear.',
-  rounds: 8,
-  shiftSeconds: 90,
-  startMoney: 150,
-  crews: 1,
-  depot: [4, 8],
-  cards: [
-    'crew',
-    'data-fusion',
-    'extractor',
-    'charts',
-    'asset-data-insights',
-    'infield',
-    'inrobot',
-    'atlas-ai',
-    'canvas',
-    'search',
-    'flows',
-  ],
-  build(w) {
-    const ironOre = w.belt([
-      [0, 0],
-      [9, 0],
-    ]);
-    w.source('iron-ore', 0.7, -2, 0, ironOre, 0, 1);
-    w.source('iron-ore', 0.4, -2, -2, ironOre, 0, 0, 3);
-    for (const [x, stage] of [
-      [0, 1],
-      [2, 1],
-      [4, 3],
-    ]) {
-      w.furnace('iron-plate', x, 2, stage);
-      w.inserter(x, 1, 'south', stage);
-      w.inserter(x, 4, 'south', stage);
-    }
-    w.belt(
-      [
-        [0, 5],
-        [30, 5],
-      ],
-      { sink: true },
-    );
-    w.belt(
-      [
-        [0, 11],
-        [30, 11],
-      ],
-      { sink: true },
-    );
-    const copperOre = w.belt([
-      [0, 16],
-      [15, 16],
-    ]);
-    w.source('copper-ore', 1.0, -2, 16, copperOre, 0, 1);
-    w.source('copper-ore', 1.0, -2, 14, copperOre, 0, 0, 2);
-    w.source('copper-ore', 0.6, 3, 17, copperOre, 3, 1, 3);
-    for (const [x, stage] of [
-      [0, 1],
-      [2, 1],
-      [4, 1],
-      [6, 2],
-      [8, 2],
-      [10, 2],
-      [12, 3],
-      [14, 3],
-    ]) {
-      w.furnace('copper-plate', x, 13, stage);
-      w.inserter(x, 15, 'north', stage);
-      w.inserter(x, 12, 'north', stage);
-    }
-    // Cable assemblers A, B, C and circuit assemblers 1, 2 alternate along the row.
-    w.assembler('copper-cable', 10, 7);
-    w.inserter(11, 10, 'north');
-    w.assembler('electronic-circuit', 14, 7);
-    w.inserter(13, 8, 'east');
-    w.inserter(15, 6, 'south');
-    w.inserter(15, 10, 'south');
-    w.assembler('copper-cable', 18, 7, 2);
-    w.inserter(19, 10, 'north', 2);
-    w.inserter(17, 8, 'west', 2);
-    w.assembler('electronic-circuit', 22, 7, 3);
-    w.inserter(21, 8, 'east', 3);
-    w.inserter(23, 6, 'south', 3);
-    w.inserter(23, 10, 'south', 3);
-    w.assembler('copper-cable', 26, 7, 3);
-    w.inserter(27, 10, 'north', 3);
-    w.inserter(25, 8, 'west', 3);
-  },
-  stages: [
-    {
-      round: 1,
-      title: 'Circuits',
-      text: 'One cable assembler feeds one circuit assembler.',
-      orders: [{ item: 'electronic-circuit', perShift: 20 }],
-    },
-    {
-      round: 3,
-      title: 'More cable',
-      text: 'A second cable assembler and three copper furnaces double the cable supply.',
-      orders: [{ item: 'electronic-circuit', perShift: 30 }],
-    },
-    {
-      round: 6,
-      title: 'Second circuit line',
-      text: 'A second circuit assembler with its own cable supply.',
-      orders: [{ item: 'electronic-circuit', perShift: 48 }],
-    },
-  ],
-  threatBudget: (round) => 6 + round * 3,
-  threats: {
-    wear: { weight: 3, from: 1 },
-    clog: { weight: 2, from: 1 },
-    jam: { weight: 2, from: 1 },
-    drift: { weight: 2, from: 2 },
-    flood: { weight: 1.5, from: 3 },
-  },
-  events: [],
-};
+const DEPOT: [number, number] = [-2, 8];
 
-/**
- * Level 3: red science, then green science. Gears for green science ride the far side of the
- * copper belt; science packs ride the far side of the iron belt to the dock.
- */
-export const SCIENCE_LAB: LevelDef = {
-  id: 'science-lab',
-  name: 'Science Lab',
-  text: 'Red science first, then the long green science chain. Expect a plant trip and a retirement.',
-  rounds: 9,
-  shiftSeconds: 90,
-  startMoney: 180,
-  crews: 2,
-  depot: [2, 8],
-  cards: [
-    'crew',
-    'data-fusion',
-    'extractor',
-    'charts',
-    'asset-data-insights',
-    'infield',
-    'inrobot',
-    'atlas-ai',
-    'canvas',
-    'maintain',
-    'simulators',
-    'search',
-    'flows',
-  ],
-  build(w) {
-    const ironOre = w.belt([
-      [0, 0],
-      [11, 0],
-    ]);
-    w.source('iron-ore', 1.0, -2, 0, ironOre, 0, 1);
-    w.source('iron-ore', 1.0, -2, -2, ironOre, 0, 0, 2);
-    for (const [x, stage] of [
-      [0, 1],
-      [2, 1],
-      [4, 1],
-      [6, 2],
-      [8, 2],
-      [10, 2],
-    ]) {
-      w.furnace('iron-plate', x, 2, stage);
-      w.inserter(x, 1, 'south', stage);
-      w.inserter(x, 4, 'south', stage);
-    }
-    w.belt(
-      [
-        [0, 5],
-        [44, 5],
-      ],
-      { sink: true },
-    );
-    w.belt(
-      [
-        [0, 11],
-        [44, 11],
-      ],
-      { sink: true },
-    );
-    const copperOre = w.belt([
-      [0, 16],
-      [7, 16],
-    ]);
-    w.source('copper-ore', 0.7, -2, 16, copperOre, 0, 1);
-    w.source('copper-ore', 0.4, -2, 14, copperOre, 0, 0, 2);
-    for (const [x, stage] of [
-      [0, 1],
-      [2, 1],
-      [4, 2],
-    ]) {
-      w.furnace('copper-plate', x, 13, stage);
-      w.inserter(x, 15, 'north', stage);
-      w.inserter(x, 12, 'north', stage);
-    }
-    // Red science: R1 and R2 share the gear assembler G1 between them.
-    w.assembler('automation-science-pack', 12, 7);
-    w.inserter(13, 10, 'north');
-    w.inserter(13, 6, 'north');
-    w.inserter(15, 8, 'west');
-    w.assembler('iron-gear-wheel', 16, 7);
-    w.inserter(17, 6, 'south');
-    w.assembler('automation-science-pack', 20, 7);
-    w.inserter(19, 8, 'east');
-    w.inserter(21, 10, 'north');
-    w.inserter(21, 6, 'north');
-    // Green science: gears from G2 ride the copper belt to the inserter and belt assemblers.
-    w.assembler('iron-gear-wheel', 8, 7, 2);
-    w.inserter(9, 6, 'south', 2);
-    w.inserter(9, 10, 'south', 2);
-    w.assembler('copper-cable', 24, 7, 2);
-    w.inserter(25, 10, 'north', 2);
-    w.assembler('electronic-circuit', 28, 7, 2);
-    w.inserter(27, 8, 'east', 2);
-    w.inserter(29, 6, 'south', 2);
-    w.assembler('inserter', 32, 7, 2);
-    w.inserter(31, 8, 'east', 2);
-    w.inserter(33, 6, 'south', 2);
-    w.inserter(33, 10, 'north', 2);
-    w.assembler('logistic-science-pack', 36, 7, 2);
-    w.inserter(35, 8, 'east', 2);
-    w.inserter(37, 6, 'north', 2);
-    w.assembler('transport-belt', 40, 7, 2);
-    w.inserter(39, 8, 'west', 2);
-    w.inserter(41, 6, 'south', 2);
-    w.inserter(41, 10, 'north', 2);
-  },
-  stages: [
-    {
-      round: 1,
-      title: 'Red science',
-      text: 'Two science assemblers share one gear assembler.',
-      orders: [{ item: 'automation-science-pack', perShift: 14 }],
+export const LEVELS: LevelDef[] = [
+  {
+    id: 'gear-works',
+    name: 'Gear Works',
+    text: 'A small smelting line making iron gears. Keep the gears flowing.',
+    rounds: 6,
+    shiftSeconds: 90,
+    startMoney: 120,
+    crews: 1,
+    depot: DEPOT,
+    cards: cardsUpTo(1),
+    build(w) {
+      ironSmelter(w, [1, 1, 1, 1, 2, 2], [1, 1, 1, 2], 16);
+      assembler(w, 'iron-gear-wheel', 6, { top: ['in', 'out', 'in'] });
+      assembler(w, 'iron-gear-wheel', 10, { top: ['in', 'out', 'in'], stage: 2 });
     },
-    {
-      round: 4,
-      title: 'Green science',
-      text: 'Cable, circuits, inserters and belts come together into logistic science packs.',
-      orders: [
-        { item: 'automation-science-pack', perShift: 14 },
-        { item: 'logistic-science-pack', perShift: 5 },
-      ],
-    },
-  ],
-  threatBudget: (round) => 8 + round * 3,
-  threats: {
-    wear: { weight: 3, from: 1 },
-    clog: { weight: 2, from: 1 },
-    jam: { weight: 2, from: 1 },
-    drift: { weight: 2, from: 1 },
-    flood: { weight: 1.5, from: 2 },
+    stages: [
+      { round: 1, title: 'Iron gears', text: 'Four furnaces feed one gear assembler.', orders: [{ item: 'iron-gear-wheel', perShift: 33 }] },
+      {
+        round: 4,
+        title: 'Second gear assembler',
+        text: 'Two more furnaces and a second gear assembler double the order.',
+        orders: [{ item: 'iron-gear-wheel', perShift: 64 }],
+      },
+    ],
+    threatBudget: (r) => 3 + r * 2,
+    threats: { wear: { weight: 3, from: 1 }, clog: { weight: 2, from: 1 } },
+    events: [],
   },
-  events: [
-    { round: 5, type: 'knowledge-loss', second: 30 },
-    { round: 7, type: 'trip', second: 40 },
-    { round: 9, type: 'trip', second: 20 },
-  ],
-};
-
-export const LEVELS: LevelDef[] = [GEAR_WORKS, CIRCUIT_PLANT, SCIENCE_LAB];
+  {
+    id: 'copper-lane',
+    name: 'Copper Lane',
+    text: 'Gears on the iron belt, and copper cable joins on its own belt. Watch the inserters.',
+    rounds: 7,
+    shiftSeconds: 90,
+    startMoney: 130,
+    crews: 1,
+    depot: DEPOT,
+    cards: cardsUpTo(2),
+    build(w) {
+      ironSmelter(w, [1, 1, 1, 1], [1, 1, 1], 18);
+      copperSmelter(w, [2, 2, 2], [2, 2], 18);
+      assembler(w, 'iron-gear-wheel', 6, { top: ['in', 'out', 'in'] });
+      assembler(w, 'copper-cable', 12, { bottom: [null, 'in', 'out'], stage: 2 });
+    },
+    stages: [
+      { round: 1, title: 'Gears', text: 'The gear line from before.', orders: [{ item: 'iron-gear-wheel', perShift: 33 }] },
+      {
+        round: 3,
+        title: 'Copper cable',
+        text: 'A copper smelter and a cable assembler come online on the second belt.',
+        orders: [
+          { item: 'iron-gear-wheel', perShift: 33 },
+          { item: 'copper-cable', perShift: 56 },
+        ],
+      },
+    ],
+    threatBudget: (r) => 4 + r * 2.5,
+    threats: { wear: { weight: 3, from: 1 }, clog: { weight: 2, from: 1 }, jam: { weight: 2, from: 2 } },
+    events: [],
+  },
+  {
+    id: 'red-science',
+    name: 'Red Science',
+    text: 'Gears and copper plates become automation science packs.',
+    rounds: 8,
+    shiftSeconds: 90,
+    startMoney: 140,
+    crews: 1,
+    depot: DEPOT,
+    cards: cardsUpTo(3),
+    build(w) {
+      ironSmelter(w, [1, 1, 1], [1, 1], 18);
+      copperSmelter(w, [1, 1], [1, 1], 18);
+      assembler(w, 'automation-science-pack', 4, { from: ['right'], top: [null, 'out'], bottom: [null, 'in'] });
+      assembler(w, 'iron-gear-wheel', 8, { top: ['in', null, 'in'] });
+      assembler(w, 'automation-science-pack', 12, { from: ['left'], top: [null, 'out'], bottom: [null, 'in'], stage: 2 });
+    },
+    stages: [
+      {
+        round: 1,
+        title: 'Red science',
+        text: 'A gear assembler hands gears straight to a science assembler.',
+        orders: [{ item: 'automation-science-pack', perShift: 7 }],
+      },
+      {
+        round: 4,
+        title: 'Second science assembler',
+        text: 'The gear assembler now feeds two science assemblers.',
+        orders: [{ item: 'automation-science-pack', perShift: 14 }],
+      },
+    ],
+    threatBudget: (r) => 5 + r * 2.5,
+    threats: { wear: { weight: 3, from: 1 }, clog: { weight: 2, from: 1 }, jam: { weight: 2, from: 1 } },
+    events: [],
+  },
+  {
+    id: 'circuit-plant',
+    name: 'Circuit Plant',
+    text: 'Cable assemblers hand cable straight to a circuit assembler. Some sensors start lying.',
+    rounds: 8,
+    shiftSeconds: 90,
+    startMoney: 150,
+    crews: 1,
+    depot: DEPOT,
+    cards: cardsUpTo(4),
+    build(w) {
+      ironSmelter(w, [1, 1], [1], 22);
+      copperSmelter(w, [1, 1, 1, 2, 2, 2], [1, 1, 2, 2], 22);
+      assembler(w, 'copper-cable', 8, { bottom: [null, 'in'] });
+      assembler(w, 'electronic-circuit', 12, { from: ['left'], top: [null, 'in'], bottom: [null, 'out'] });
+      assembler(w, 'copper-cable', 16, { bottom: [null, 'in'], stage: 2 });
+      w.inserter(15, 8, 'west', 2);
+    },
+    stages: [
+      {
+        round: 1,
+        title: 'Circuits',
+        text: 'One cable assembler feeds one circuit assembler.',
+        orders: [{ item: 'electronic-circuit', perShift: 19 }],
+      },
+      {
+        round: 4,
+        title: 'More cable',
+        text: 'A second cable assembler and three more copper furnaces double the cable.',
+        orders: [{ item: 'electronic-circuit', perShift: 26 }],
+      },
+    ],
+    threatBudget: (r) => 6 + r * 2.5,
+    threats: {
+      wear: { weight: 3, from: 1 },
+      clog: { weight: 2, from: 1 },
+      jam: { weight: 2, from: 1 },
+      drift: { weight: 2, from: 2 },
+    },
+    events: [],
+  },
+  {
+    id: 'control-room',
+    name: 'Control Room',
+    text: 'Two circuit assemblers and a wall of alarms. Most of them are noise.',
+    rounds: 8,
+    shiftSeconds: 90,
+    startMoney: 160,
+    crews: 2,
+    depot: DEPOT,
+    cards: cardsUpTo(5),
+    build(w) {
+      ironSmelter(w, [1, 1, 2], [1, 2], 30);
+      copperSmelter(w, [1, 1, 1, 1, 1, 1, 2, 2, 2], [1, 1, 1, 1, 2, 2], 30);
+      assembler(w, 'copper-cable', 8, { bottom: [null, 'in'] });
+      assembler(w, 'electronic-circuit', 12, { from: ['left', 'right'], top: [null, 'in'], bottom: [null, 'out'] });
+      assembler(w, 'copper-cable', 16, { bottom: [null, 'in'] });
+      assembler(w, 'electronic-circuit', 20, { from: ['right'], top: [null, 'in'], bottom: [null, 'out'], stage: 2 });
+      assembler(w, 'copper-cable', 24, { bottom: [null, 'in'], stage: 2 });
+    },
+    stages: [
+      {
+        round: 1,
+        title: 'Circuits',
+        text: 'Two cable assemblers feed one circuit assembler.',
+        orders: [{ item: 'electronic-circuit', perShift: 26 }],
+      },
+      {
+        round: 4,
+        title: 'Second circuit line',
+        text: 'A second circuit assembler with its own cable assembler.',
+        orders: [{ item: 'electronic-circuit', perShift: 56 }],
+      },
+    ],
+    threatBudget: (r) => 7 + r * 3,
+    threats: {
+      wear: { weight: 3, from: 1 },
+      clog: { weight: 2, from: 1 },
+      jam: { weight: 2, from: 1 },
+      drift: { weight: 2, from: 1 },
+      flood: { weight: 2, from: 2 },
+    },
+    events: [],
+  },
+  {
+    id: 'belt-works',
+    name: 'Belt Works',
+    text: 'Gears and plates become transport belts. Halfway through, your most experienced operator retires.',
+    rounds: 8,
+    shiftSeconds: 90,
+    startMoney: 170,
+    crews: 2,
+    depot: DEPOT,
+    cards: cardsUpTo(6),
+    build(w) {
+      ironSmelter(w, [1, 1, 1, 1, 2, 2, 2, 2], [1, 1, 1, 2, 2], 26);
+      assembler(w, 'iron-gear-wheel', 4, { top: ['in', null, 'in'] });
+      assembler(w, 'transport-belt', 8, { from: ['left'], top: ['in', 'out'] });
+      assembler(w, 'iron-gear-wheel', 14, { top: ['in', null, 'in'], stage: 2 });
+      assembler(w, 'transport-belt', 18, { from: ['left'], top: ['in', 'out'], stage: 2 });
+    },
+    stages: [
+      {
+        round: 1,
+        title: 'Transport belts',
+        text: 'A gear assembler feeds a belt assembler.',
+        orders: [{ item: 'transport-belt', perShift: 54 }],
+      },
+      {
+        round: 4,
+        title: 'Second belt line',
+        text: 'Four more furnaces and a second gear and belt pair.',
+        orders: [{ item: 'transport-belt', perShift: 112 }],
+      },
+    ],
+    threatBudget: (r) => 7 + r * 3,
+    threats: {
+      wear: { weight: 3, from: 1 },
+      clog: { weight: 2, from: 1 },
+      jam: { weight: 2, from: 1 },
+      drift: { weight: 1.5, from: 1 },
+      flood: { weight: 1.5, from: 2 },
+    },
+    events: [{ round: 5, type: 'knowledge-loss', second: 20 }],
+  },
+  {
+    id: 'power-trip',
+    name: 'Power Trip',
+    text: 'A big red science line on a weak grid. Expect the power to trip.',
+    rounds: 8,
+    shiftSeconds: 90,
+    startMoney: 180,
+    crews: 2,
+    depot: DEPOT,
+    cards: cardsUpTo(7),
+    build(w) {
+      ironSmelter(w, [1, 1, 1, 2, 2, 2], [1, 1, 2, 2], 30);
+      copperSmelter(w, [1, 1, 2, 2], [1, 2], 30);
+      assembler(w, 'automation-science-pack', 4, { from: ['right'], top: [null, 'out'], bottom: [null, 'in'] });
+      assembler(w, 'iron-gear-wheel', 8, { top: ['in', null, 'in'] });
+      assembler(w, 'automation-science-pack', 12, { from: ['left'], top: [null, 'out'], bottom: [null, 'in'] });
+      assembler(w, 'automation-science-pack', 16, { from: ['right'], top: [null, 'out'], bottom: [null, 'in'], stage: 2 });
+      assembler(w, 'iron-gear-wheel', 20, { top: ['in', null, 'in'], stage: 2 });
+      assembler(w, 'automation-science-pack', 24, { from: ['left'], top: [null, 'out'], bottom: [null, 'in'], stage: 2 });
+    },
+    stages: [
+      {
+        round: 1,
+        title: 'Red science',
+        text: 'One gear assembler feeds two science assemblers.',
+        orders: [{ item: 'automation-science-pack', perShift: 14 }],
+      },
+      {
+        round: 4,
+        title: 'Double the line',
+        text: 'A second gear assembler with two more science assemblers.',
+        orders: [{ item: 'automation-science-pack', perShift: 28 }],
+      },
+    ],
+    threatBudget: (r) => 8 + r * 3,
+    threats: {
+      wear: { weight: 3, from: 1 },
+      clog: { weight: 2, from: 1 },
+      jam: { weight: 2, from: 1 },
+      drift: { weight: 1.5, from: 1 },
+      flood: { weight: 1.5, from: 1 },
+    },
+    events: [
+      { round: 3, type: 'trip', second: 45 },
+      { round: 6, type: 'trip', second: 30 },
+      { round: 8, type: 'trip', second: 50 },
+    ],
+  },
+  {
+    id: 'green-science',
+    name: 'Green Science',
+    text: 'Inserters and transport belts, then logistic science packs from both.',
+    rounds: 9,
+    shiftSeconds: 90,
+    startMoney: 190,
+    crews: 2,
+    depot: DEPOT,
+    cards: cardsUpTo(8),
+    build(w) {
+      ironSmelter(w, [1, 1, 1, 1, 1, 1], [1, 1, 1, 1], 30);
+      copperSmelter(w, [1, 1], [1], 30);
+      // Gears ride the far side of the copper belt to the inserter and belt assemblers.
+      assembler(w, 'iron-gear-wheel', 4, { top: ['in', null, 'in'], bottom: [null, 'out'] });
+      assembler(w, 'copper-cable', 8, { bottom: [null, 'in'] });
+      assembler(w, 'electronic-circuit', 12, { from: ['left'], top: [null, 'in'] });
+      assembler(w, 'inserter', 16, { from: ['left'], top: [null, 'in'], bottom: [null, 'in'] });
+      assembler(w, 'logistic-science-pack', 20, { from: ['left', 'right'], top: [null, 'out'], stage: 2 });
+      assembler(w, 'transport-belt', 24, { top: [null, 'in'], bottom: [null, 'in'] });
+      // Until the science assembler arrives, inserters and belts ship straight to the dock.
+      w.inserter(18, 6, 'north', 1, undefined, 2);
+      w.inserter(26, 6, 'north', 1, undefined, 2);
+    },
+    stages: [
+      {
+        round: 1,
+        title: 'Inserters and belts',
+        text: 'Cable, circuits and gears come together into inserters, next to a belt assembler.',
+        orders: [
+          { item: 'inserter', perShift: 16 },
+          { item: 'transport-belt', perShift: 30 },
+        ],
+      },
+      {
+        round: 4,
+        title: 'Green science',
+        text: 'A science assembler between them turns inserters and belts into logistic science packs.',
+        orders: [{ item: 'logistic-science-pack', perShift: 6 }],
+      },
+    ],
+    threatBudget: (r) => 8 + r * 3,
+    threats: {
+      wear: { weight: 3, from: 1 },
+      clog: { weight: 2, from: 1 },
+      jam: { weight: 2, from: 1 },
+      drift: { weight: 2, from: 1 },
+      flood: { weight: 1.5, from: 1 },
+    },
+    events: [{ round: 6, type: 'trip', second: 40 }],
+  },
+  {
+    id: 'science-lab',
+    name: 'Science Lab',
+    text: 'Red science first, then the long green science chain. Expect a plant trip and a retirement.',
+    rounds: 9,
+    shiftSeconds: 90,
+    startMoney: 200,
+    crews: 2,
+    depot: DEPOT,
+    cards: cardsUpTo(9),
+    build(w) {
+      ironSmelter(w, [1, 1, 1, 2, 2, 2, 2, 2], [1, 1, 2, 2, 2], 42);
+      copperSmelter(w, [1, 1, 2], [1, 2], 42);
+      assembler(w, 'automation-science-pack', 4, { from: ['right'], top: [null, 'out'], bottom: [null, 'in'] });
+      assembler(w, 'iron-gear-wheel', 8, { top: ['in', null, 'in'] });
+      assembler(w, 'automation-science-pack', 12, { from: ['left'], top: [null, 'out'], bottom: [null, 'in'] });
+      assembler(w, 'iron-gear-wheel', 16, { top: ['in', null, 'in'], bottom: [null, 'out'], stage: 2 });
+      assembler(w, 'copper-cable', 20, { bottom: [null, 'in'], stage: 2 });
+      assembler(w, 'electronic-circuit', 24, { from: ['left'], top: [null, 'in'], stage: 2 });
+      assembler(w, 'inserter', 28, { from: ['left'], top: [null, 'in'], bottom: [null, 'in'], stage: 2 });
+      assembler(w, 'logistic-science-pack', 32, { from: ['left', 'right'], top: [null, 'out'], stage: 2 });
+      assembler(w, 'transport-belt', 36, { top: [null, 'in'], bottom: [null, 'in'], stage: 2 });
+    },
+    stages: [
+      {
+        round: 1,
+        title: 'Red science',
+        text: 'Two science assemblers share one gear assembler.',
+        orders: [{ item: 'automation-science-pack', perShift: 14 }],
+      },
+      {
+        round: 4,
+        title: 'Green science',
+        text: 'Cable, circuits, inserters and belts come together into logistic science packs.',
+        orders: [
+          { item: 'automation-science-pack', perShift: 14 },
+          { item: 'logistic-science-pack', perShift: 6 },
+        ],
+      },
+    ],
+    threatBudget: (r) => 9 + r * 3,
+    threats: {
+      wear: { weight: 3, from: 1 },
+      clog: { weight: 2, from: 1 },
+      jam: { weight: 2, from: 1 },
+      drift: { weight: 2, from: 1 },
+      flood: { weight: 1.5, from: 1 },
+    },
+    events: [
+      { round: 5, type: 'knowledge-loss', second: 30 },
+      { round: 7, type: 'trip', second: 40 },
+      { round: 9, type: 'trip', second: 20 },
+    ],
+  },
+  {
+    id: 'megafactory',
+    name: 'Megafactory',
+    text: 'Everything at once: red science, green science and circuits for export. Every problem, every event.',
+    rounds: 10,
+    shiftSeconds: 90,
+    startMoney: 220,
+    crews: 2,
+    depot: DEPOT,
+    cards: cardsUpTo(10),
+    build(w) {
+      ironSmelter(w, [1, 1, 1, 1, 2, 2, 2, 2, 3, 3], [1, 1, 1, 2, 2, 3], 50);
+      copperSmelter(w, [1, 1, 2, 3, 3, 3], [1, 2, 3, 3], 50);
+      assembler(w, 'automation-science-pack', 4, { from: ['right'], top: [null, 'out'], bottom: [null, 'in'] });
+      assembler(w, 'iron-gear-wheel', 8, { top: ['in', null, 'in'] });
+      assembler(w, 'automation-science-pack', 12, { from: ['left'], top: [null, 'out'], bottom: [null, 'in'] });
+      assembler(w, 'iron-gear-wheel', 16, { top: ['in', null, 'in'], bottom: [null, 'out'], stage: 2 });
+      assembler(w, 'copper-cable', 20, { bottom: [null, 'in'], stage: 2 });
+      assembler(w, 'electronic-circuit', 24, { from: ['left'], top: [null, 'in'], stage: 2 });
+      assembler(w, 'inserter', 28, { from: ['left'], top: [null, 'in'], bottom: [null, 'in'], stage: 2 });
+      assembler(w, 'logistic-science-pack', 32, { from: ['left', 'right'], top: [null, 'out'], stage: 2 });
+      assembler(w, 'transport-belt', 36, { top: [null, 'in'], bottom: [null, 'in'], stage: 2 });
+      assembler(w, 'copper-cable', 40, { bottom: [null, 'in'], stage: 3 });
+      assembler(w, 'electronic-circuit', 44, { from: ['left'], top: [null, 'in'], bottom: [null, 'out'], stage: 3 });
+    },
+    stages: [
+      {
+        round: 1,
+        title: 'Red science',
+        text: 'Two science assemblers share one gear assembler.',
+        orders: [{ item: 'automation-science-pack', perShift: 14 }],
+      },
+      {
+        round: 3,
+        title: 'Green science',
+        text: 'The green science chain comes online.',
+        orders: [
+          { item: 'automation-science-pack', perShift: 14 },
+          { item: 'logistic-science-pack', perShift: 6 },
+        ],
+      },
+      {
+        round: 6,
+        title: 'Circuits for export',
+        text: 'A circuit line at the end of the row ships circuits to customers.',
+        orders: [
+          { item: 'automation-science-pack', perShift: 14 },
+          { item: 'logistic-science-pack', perShift: 6 },
+          { item: 'electronic-circuit', perShift: 19 },
+        ],
+      },
+    ],
+    threatBudget: (r) => 10 + r * 3,
+    threats: {
+      wear: { weight: 3, from: 1 },
+      clog: { weight: 2, from: 1 },
+      jam: { weight: 2, from: 1 },
+      drift: { weight: 2, from: 1 },
+      flood: { weight: 1.5, from: 1 },
+    },
+    events: [
+      { round: 4, type: 'knowledge-loss', second: 30 },
+      { round: 5, type: 'trip', second: 50 },
+      { round: 8, type: 'trip', second: 30 },
+      { round: 10, type: 'trip', second: 20 },
+    ],
+  },
+];

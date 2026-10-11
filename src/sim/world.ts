@@ -27,6 +27,15 @@ interface PendingInserter {
   dir: Dir;
   stage: number;
   lane?: 0 | 1;
+  until?: number;
+}
+
+interface PendingDrill {
+  item: ItemName;
+  x: number;
+  y: number;
+  dir: Dir;
+  stage: number;
 }
 
 const key = (x: number, y: number) => `${x},${y}`;
@@ -47,6 +56,7 @@ export class World {
   readonly sources: Source[] = [];
   private readonly grid = new Map<string, Occupant>();
   private pending: PendingInserter[] = [];
+  private pendingDrills: PendingDrill[] = [];
   private boundsCache: { minX: number; minY: number; maxX: number; maxY: number } | null = null;
   private nextId = 1;
   /** Entities with a stage above this are not built yet. */
@@ -96,33 +106,46 @@ export class World {
   }
 
   /** An inserter at (x, y) dropping towards `dir`. Endpoints are resolved by `finish()`. */
-  inserter(x: number, y: number, dir: Dir, stage = 1, lane?: 0 | 1): void {
-    this.pending.push({ x, y, dir, stage, lane });
+  inserter(x: number, y: number, dir: Dir, stage = 1, lane?: 0 | 1, until?: number): void {
+    this.pending.push({ x, y, dir, stage, lane, until });
     this.occupy(x, y, 1, { kind: 'card', id: -1 });
   }
 
-  /** A 2x2 mining drill at (x, y) feeding tile `index` of `line`. */
-  source(item: ItemName, rate: number, x: number, y: number, line: BeltLine, index: number, lane: 0 | 1, stage = 1): Source {
-    const s = new Source(this.nextId++, item, rate, x, y, line, lane, index, stage);
-    this.occupy(x, y, 2, { kind: 'source', source: s });
-    this.sources.push(s);
-    return s;
+  /** A 3x3 electric mining drill with its top-left at (x, y), outputting towards `dir` onto a belt. */
+  drill(item: ItemName, x: number, y: number, dir: Dir, stage = 1): void {
+    this.pendingDrills.push({ item, x, y, dir, stage });
+    this.occupy(x, y, 3, { kind: 'card', id: -1 });
+  }
+
+  /** The lane on the far side of a belt tile, seen from something dropping towards `dir`. */
+  private farLane(line: BeltLine, index: number, dir: Dir): 0 | 1 {
+    const [dx, dy] = DIR_VEC[dir];
+    const bd = DIR_VEC[line.tiles[index].dir];
+    const left = [bd[1], -bd[0]];
+    return -dx * left[0] - dy * left[1] > 0 ? 1 : 0;
   }
 
   finish(): this {
+    for (const d of this.pendingDrills) {
+      const [dx, dy] = DIR_VEC[d.dir];
+      const ox = d.x + 1 + dx * 2;
+      const oy = d.y + 1 + dy * 2;
+      const out = this.endpoint(ox, oy);
+      if (out?.kind !== 'belt') throw new Error(`Drill at ${d.x},${d.y} has no belt at ${ox},${oy}`);
+      const lane = this.farLane(out.line, out.index, d.dir);
+      const s = new Source(this.nextId++, d.item, d.x, d.y, d.dir, out.line, lane, out.index, d.stage);
+      for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) this.grid.set(key(d.x + i, d.y + j), { kind: 'source', source: s });
+      this.sources.push(s);
+    }
+    this.pendingDrills = [];
     for (const p of this.pending) {
       const [dx, dy] = DIR_VEC[p.dir];
       const pickup = this.endpoint(p.x - dx, p.y - dy);
       const drop = this.endpoint(p.x + dx, p.y + dy);
       if (!pickup || !drop) throw new Error(`Inserter at ${p.x},${p.y} has nothing to pick from or drop to`);
       let lane: 0 | 1 = p.lane ?? 0;
-      if (p.lane === undefined && drop.kind === 'belt') {
-        // Factorio drops onto the far lane.
-        const bd = DIR_VEC[drop.line.tiles[drop.index].dir];
-        const left = [bd[1], -bd[0]];
-        lane = -dx * left[0] - dy * left[1] > 0 ? 1 : 0;
-      }
-      const ins = new Inserter(this.nextId++, p.x, p.y, p.dir, pickup, drop, lane, p.stage);
+      if (p.lane === undefined && drop.kind === 'belt') lane = this.farLane(drop.line, drop.index, p.dir);
+      const ins = new Inserter(this.nextId++, p.x, p.y, p.dir, pickup, drop, lane, p.stage, p.until);
       this.grid.set(key(p.x, p.y), { kind: 'inserter', inserter: ins });
       this.inserters.push(ins);
     }
@@ -177,8 +200,8 @@ export class World {
 
   // ---- Running --------------------------------------------------------------
 
-  active(e: { stage: number }): boolean {
-    return e.stage <= this.stage;
+  active(e: { stage: number; until?: number }): boolean {
+    return e.stage <= this.stage && this.stage < (e.until ?? Infinity);
   }
 
   activeMachines(): Machine[] {

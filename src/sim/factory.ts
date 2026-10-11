@@ -129,8 +129,10 @@ export class Machine {
   progress = 0;
   crafting = false;
   private craftOff = false;
-  /** Ticks spent crafting in the current shift, for stats and animation. */
+  /** Ticks spent crafting, for stats. */
   busyTicks = 0;
+  /** Did it make progress on the last tick? Drives the working animation. */
+  working = false;
 
   constructor(
     readonly id: number,
@@ -184,6 +186,7 @@ export class Machine {
 
   /** `speedMul` folds in wear, breakdowns and power; `offChance` is the sensor-drift off-spec chance. */
   step(speedMul: number, offChance: number, rng: Rng): void {
+    this.working = false;
     if (!this.crafting) {
       if (this.output.good + this.output.off + this.recipe.count > OUTPUT_CAP) return;
       for (const [item, n] of this.recipe.ingredients) {
@@ -205,6 +208,7 @@ export class Machine {
       this.progress = 0;
     }
     if (speedMul <= 0) return;
+    this.working = true;
     this.busyTicks++;
     this.progress += (this.speed * speedMul) / TICKS_PER_SECOND;
     if (this.progress >= this.recipe.time) {
@@ -237,6 +241,8 @@ export class Inserter {
     readonly drop: Endpoint,
     readonly dropLane: 0 | 1,
     readonly stage: number,
+    /** Removed when this stage is reached. */
+    readonly until = Infinity,
   ) {}
 
   /** 0 at the pickup side, 1 at the drop side; for rendering the arm. */
@@ -297,17 +303,21 @@ export class Inserter {
   }
 }
 
-/** A mining drill putting ore onto a belt lane at a fixed rate. */
+/** Electric mining drill: 0.5 ore/s (mining speed 0.5, mining time 1). */
+export const DRILL_RATE = 0.5;
+
+/** A 3x3 electric mining drill putting ore onto the far lane of the belt in front of it. */
 export class Source {
   private acc = 0;
+  readonly rate = DRILL_RATE;
 
   constructor(
     readonly id: number,
     readonly item: ItemName,
-    /** Items per second. */
-    readonly rate: number,
     readonly x: number,
     readonly y: number,
+    /** Output side. */
+    readonly dir: Dir,
     readonly line: BeltLine,
     readonly lane: 0 | 1,
     readonly index: number,
