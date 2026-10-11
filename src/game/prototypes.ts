@@ -54,14 +54,22 @@ PROTOTYPES.push(
     size: [2, 2],
     rotatable: false,
     layers: ['stone-furnace/shadow', 'stone-furnace'],
-    workingLayers: ['stone-furnace/fire'],
+    workingLayers: ['stone-furnace/fire', 'stone-furnace/fire/light', 'stone-furnace/ground_light'],
   },
   {
     name: 'electric-mining-drill',
     size: [3, 3],
     rotatable: true,
     // Direction is the side the drill outputs to.
-    layers: perDirection((d) => [`electric-mining-drill/${d}/shadow`, `electric-mining-drill/${d}`]),
+    // The body is only the frame; the head and output chute are separate animated layers.
+    layers: perDirection((d) => [
+      `electric-mining-drill/${d}/shadow`,
+      `electric-mining-drill/${d}/drill/shadow`,
+      `electric-mining-drill/${d}`,
+      `electric-mining-drill/${d}/drill`,
+      // Factorio 1.1 has no output chute for a south-facing drill.
+      ...(d === 'south' ? [] : [`electric-mining-drill/${d}/output`]),
+    ]),
   },
   {
     name: 'pumpjack',

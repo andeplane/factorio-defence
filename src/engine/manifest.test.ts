@@ -27,6 +27,11 @@ describe('frameAt', () => {
     expect([0, 1, 2, 3, 8, 9].map((t) => frameAt(def, t))).toEqual([0, 0, 1, 1, 0, 0]);
   });
 
+  it('follows a 1-based frameSequence', () => {
+    const def = { file: 'a', width: 1, height: 1, frameCount: 5, frameSequence: [1, 5, 3] };
+    expect([0, 1, 2, 3].map((t) => frameAt(def, t))).toEqual([0, 4, 2, 0]);
+  });
+
   it('ping-pongs for forward-then-backward', () => {
     const def = { file: 'a', width: 1, height: 1, frameCount: 3, runMode: 'forward-then-backward' as const };
     expect([0, 1, 2, 3, 4, 5].map((t) => frameAt(def, t))).toEqual([0, 1, 2, 1, 0, 1]);
