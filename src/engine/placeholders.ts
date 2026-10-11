@@ -72,6 +72,48 @@ function belt(direction: string): PlaceholderAnimation {
   return { canvas, def: { file: 'placeholder', width: PX, height: PX, frameCount: frames, animationSpeed: 0.5 } };
 }
 
+const EDGE: Record<string, [number, number]> = { north: [PX / 2, 0], east: [PX, PX / 2], south: [PX / 2, PX], west: [0, PX / 2] };
+const OPPOSITE: Record<string, string> = { north: 'south', east: 'west', south: 'north', west: 'east' };
+
+/** Quarter-circle belt entering moving `from` and leaving moving `to`. */
+function beltCurve(from: string, to: string): PlaceholderAnimation {
+  const frames = 16;
+  const entry = EDGE[OPPOSITE[from]];
+  const exit = EDGE[to];
+  // The arc is centred on the tile corner shared by the entry and exit edges.
+  const c: [number, number] = [entry[0] === PX / 2 ? exit[0] : entry[0], entry[1] === PX / 2 ? exit[1] : entry[1]];
+  const a0 = Math.atan2(entry[1] - c[1], entry[0] - c[0]);
+  const a1 = Math.atan2(exit[1] - c[1], exit[0] - c[0]);
+  let delta = a1 - a0;
+  if (delta > Math.PI) delta -= 2 * Math.PI;
+  if (delta < -Math.PI) delta += 2 * Math.PI;
+  const ccw = delta < 0;
+  const r = PX / 2;
+  const canvas = sheet(PX, PX, frames, frames, (ctx, f) => {
+    const arc = (radius: number) => {
+      ctx.beginPath();
+      ctx.arc(c[0], c[1], radius, a0, a1, ccw);
+    };
+    ctx.lineWidth = PX - 6;
+    ctx.strokeStyle = '#3a3a3a';
+    arc(r);
+    ctx.stroke();
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = '#c9a227';
+    arc(r - 13);
+    ctx.stroke();
+    arc(r + 13);
+    ctx.stroke();
+    ctx.strokeStyle = '#8a8a8a';
+    ctx.lineWidth = 8;
+    ctx.setLineDash([2, 6]);
+    ctx.lineDashOffset = -(f / frames) * 16;
+    arc(r);
+    ctx.stroke();
+  });
+  return { canvas, def: { file: 'placeholder', width: PX, height: PX, frameCount: frames, animationSpeed: 0.5 } };
+}
+
 function gear(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number, teeth: number, angle: number, color: string) {
   ctx.save();
   ctx.translate(cx, cy);
@@ -179,6 +221,13 @@ const ANIMATIONS: Record<string, () => PlaceholderAnimation> = {
   'transport-belt/east': () => belt('east'),
   'transport-belt/south': () => belt('south'),
   'transport-belt/west': () => belt('west'),
+  ...Object.fromEntries(
+    ['north', 'east', 'south', 'west'].flatMap((from) =>
+      ['north', 'east', 'south', 'west']
+        .filter((to) => to !== from && to !== OPPOSITE[from])
+        .map((to) => [`transport-belt/${from}_to_${to}`, () => beltCurve(from, to)]),
+    ),
+  ),
   'assembling-machine-1': assembler,
   'assembling-machine-1/shadow': () => shadow(3, 3, 0.5),
   radar,

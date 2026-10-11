@@ -33,25 +33,50 @@ export class AssetStore {
     return this.manifest !== null;
   }
 
+  private root = FACTORIO_ASSET_ROOT;
+  private failed = new Set<string>();
+
+  /** Reads the manifest only; images are fetched by `preload`. */
   async init(root = FACTORIO_ASSET_ROOT): Promise<void> {
+    this.root = root;
     this.manifest = await loadManifest(root + 'manifest.json');
+  }
+
+  /**
+   * Fetches the images behind the given animation keys and tile names. The
+   * manifest can describe thousands of sprites, so only what the game uses is
+   * loaded. Keys absent from the manifest are skipped (they use placeholders).
+   */
+  async preload(animationKeys: Iterable<string>, tileNames: Iterable<string> = []): Promise<void> {
     if (!this.manifest) return;
     const files = new Set<string>();
-    for (const def of Object.values(this.manifest.animations)) {
-      for (const f of def.files ?? (def.file ? [def.file] : [])) files.add(f);
+    const keys = [...animationKeys];
+    const tiles = [...tileNames];
+    for (const key of keys) {
+      const def = this.manifest.animations[key];
+      if (def) for (const f of def.files ?? (def.file ? [def.file] : [])) files.add(f);
     }
-    for (const def of Object.values(this.manifest.tiles ?? {})) files.add(def.file);
+    for (const name of tiles) {
+      const def = this.manifest.tiles?.[name];
+      if (def) files.add(def.file);
+    }
     await Promise.all(
-      [...files].map(async (file) => {
-        try {
-          const tex = await PixiAssets.load<Texture>(root + file);
-          tex.source.scaleMode = 'linear';
-          this.images.set(file, tex);
-        } catch (err) {
-          console.warn(`[assets] could not load ${file}, using placeholder`, err);
-        }
-      }),
+      [...files]
+        .filter((f) => !this.images.has(f) && !this.failed.has(f))
+        .map(async (file) => {
+          try {
+            const tex = await PixiAssets.load<Texture>(this.root + file);
+            tex.source.scaleMode = 'linear';
+            this.images.set(file, tex);
+          } catch (err) {
+            this.failed.add(file);
+            console.warn(`[assets] could not load ${file}, using placeholder`, err);
+          }
+        }),
     );
+    // Drop placeholders built before these images arrived.
+    for (const key of keys) if (this.animations.get(key)?.placeholder) this.animations.delete(key);
+    for (const name of tiles) if (this.tiles.get(name)?.placeholder) this.tiles.delete(name);
   }
 
   animation(key: string): Animation {
@@ -79,6 +104,9 @@ export class AssetStore {
       if (rects.every((r) => this.images.has(r.file))) {
         const frames = rects.map((r) => sub(this.images.get(r.file)!, r.x, r.y, r.width, r.height));
         return { key, def, frames, placeholder: false };
+      }
+      if (rects.some((r) => !this.images.has(r.file) && !this.failed.has(r.file))) {
+        console.warn(`[assets] "${key}" is in the manifest but was not preloaded, using placeholder`);
       }
     }
     const ph = placeholderAnimation(key);

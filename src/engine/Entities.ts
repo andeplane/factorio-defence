@@ -20,6 +20,20 @@ export interface EntityPrototype {
    * or a list per direction.
    */
   layers: string[] | Record<Direction, string[]>;
+  /**
+   * Picks layers from the surroundings (e.g. belt curves). Re-evaluated when
+   * the entity or one of its neighbours is placed or removed. Falls back to
+   * `layers` when it returns undefined.
+   */
+  connectedLayers?: (e: Entity, world: EntityManager) => string[] | undefined;
+  /** Every animation key this prototype may use, for preloading. */
+  extraKeys?: string[];
+}
+
+/** All animation keys a prototype can show, for `AssetStore.preload`. */
+export function prototypeKeys(proto: EntityPrototype): string[] {
+  const base = Array.isArray(proto.layers) ? proto.layers : Object.values(proto.layers).flat();
+  return [...new Set([...base, ...(proto.extraKeys ?? [])])];
 }
 
 interface Layer {
@@ -28,7 +42,8 @@ interface Layer {
 }
 
 export class Entity {
-  readonly layers: Layer[] = [];
+  layers: Layer[] = [];
+  layerKeys: string[] = [];
   /** Animations only advance while the entity is working. */
   working = true;
 
@@ -112,33 +127,65 @@ export class EntityManager {
   place(proto: EntityPrototype, x: number, y: number, dir: Direction): Entity | null {
     if (!this.canPlace(proto, x, y, dir)) return null;
     const e = new Entity(this.nextId++, proto, x, y, proto.rotatable ? dir : 'north');
-    const cx = (x + e.width / 2) * TILE_PX;
-    const cy = (y + e.height / 2) * TILE_PX;
-    for (const k of layerKeys(proto, e.direction)) {
+    for (let ty = y; ty < y + e.height; ty++) {
+      for (let tx = x; tx < x + e.width; tx++) this.occupancy.set(cell(tx, ty), e.id);
+    }
+    this.entities.set(e.id, e);
+    this.refresh(e);
+    this.refreshNeighbours(e);
+    return e;
+  }
+
+  remove(e: Entity): void {
+    for (const l of e.layers) l.sprite.destroy();
+    e.layers = [];
+    for (let ty = e.y; ty < e.y + e.height; ty++) {
+      for (let tx = e.x; tx < e.x + e.width; tx++) this.occupancy.delete(cell(tx, ty));
+    }
+    this.entities.delete(e.id);
+    this.refreshNeighbours(e);
+  }
+
+  /** Rebuilds an entity's sprites if its (possibly connection-dependent) layers changed. */
+  private refresh(e: Entity): void {
+    const keys = e.proto.connectedLayers?.(e, this) ?? layerKeys(e.proto, e.direction);
+    if (keys.length === e.layerKeys.length && keys.every((k, i) => k === e.layerKeys[i])) return;
+    for (const l of e.layers) l.sprite.destroy();
+    e.layers = [];
+    e.layerKeys = keys;
+    const cx = (e.x + e.width / 2) * TILE_PX;
+    const cy = (e.y + e.height / 2) * TILE_PX;
+    for (const k of keys) {
       const anim = this.assets.animation(k);
       const sprite = makeLayerSprite(anim, cx, cy);
       if (anim.def.drawAsShadow) {
         this.shadowLayer.addChild(sprite);
       } else {
         // Sort by the entity's bottom edge so taller things overlap correctly.
-        sprite.zIndex = (y + e.height) * 1000 + e.layers.length;
+        sprite.zIndex = (e.y + e.height) * 1000 + e.layers.length;
         this.objectLayer.addChild(sprite);
       }
       e.layers.push({ anim, sprite });
     }
-    for (let ty = y; ty < y + e.height; ty++) {
-      for (let tx = x; tx < x + e.width; tx++) this.occupancy.set(cell(tx, ty), e.id);
-    }
-    this.entities.set(e.id, e);
-    return e;
   }
 
-  remove(e: Entity): void {
-    for (const l of e.layers) l.sprite.destroy();
-    for (let ty = e.y; ty < e.y + e.height; ty++) {
-      for (let tx = e.x; tx < e.x + e.width; tx++) this.occupancy.delete(cell(tx, ty));
+  private refreshNeighbours(e: Entity): void {
+    const seen = new Set<number>([e.id]);
+    const visit = (tx: number, ty: number) => {
+      const n = this.at(tx, ty);
+      if (n && !seen.has(n.id)) {
+        seen.add(n.id);
+        if (n.proto.connectedLayers) this.refresh(n);
+      }
+    };
+    for (let tx = e.x; tx < e.x + e.width; tx++) {
+      visit(tx, e.y - 1);
+      visit(tx, e.y + e.height);
     }
-    this.entities.delete(e.id);
+    for (let ty = e.y; ty < e.y + e.height; ty++) {
+      visit(e.x - 1, ty);
+      visit(e.x + e.width, ty);
+    }
   }
 
   /** Advance every animation to game tick `tick`. All belts stay in sync, like Factorio. */

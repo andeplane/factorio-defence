@@ -1,7 +1,7 @@
 import { Container } from 'pixi.js';
 import { TILE_PX } from '../engine/Camera';
 import { Engine } from '../engine/Engine';
-import { footprint, layerKeys, makeLayerSprite, rotate, type Direction, type EntityPrototype } from '../engine/Entities';
+import { footprint, layerKeys, prototypeKeys, makeLayerSprite, rotate, type Direction, type EntityPrototype } from '../engine/Entities';
 import { valueNoise } from '../engine/TileMap';
 import { PROTOTYPES, TILE_NAMES } from './prototypes';
 
@@ -57,7 +57,11 @@ class Ghost {
 }
 
 async function start(): Promise<void> {
-  await engine.init({ parent: document.getElementById('app')!, tileNames: TILE_NAMES, generateTile });
+  await engine.init({
+    parent: document.getElementById('app')!, tileNames: TILE_NAMES,
+    generateTile,
+    animationKeys: PROTOTYPES.flatMap(prototypeKeys),
+  });
   buildDemo();
 
   const ghost = new Ghost();

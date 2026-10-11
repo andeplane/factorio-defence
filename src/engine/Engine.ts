@@ -10,6 +10,8 @@ export interface EngineOptions {
   parent: HTMLElement;
   tileNames: string[];
   generateTile: TileGenerator;
+  /** Animation keys to fetch up front; tiles in `tileNames` are always fetched. */
+  animationKeys: string[];
 }
 
 /**
@@ -41,6 +43,7 @@ export class Engine {
     });
     opts.parent.appendChild(this.app.canvas);
     await this.assets.init();
+    await this.assets.preload(opts.animationKeys, opts.tileNames);
 
     this.tiles = new TileMap(this.assets, opts.tileNames, opts.generateTile);
     this.entities = new EntityManager(this.assets);

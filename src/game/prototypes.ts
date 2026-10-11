@@ -1,4 +1,5 @@
 import type { EntityPrototype } from '../engine/Entities';
+import { BELT_CURVE_KEYS, beltLayers } from './belts';
 
 export const PROTOTYPES: EntityPrototype[] = [
   {
@@ -11,6 +12,8 @@ export const PROTOTYPES: EntityPrototype[] = [
       south: ['transport-belt/south'],
       west: ['transport-belt/west'],
     },
+    connectedLayers: beltLayers,
+    extraKeys: BELT_CURVE_KEYS,
   },
   {
     name: 'assembling-machine-1',
