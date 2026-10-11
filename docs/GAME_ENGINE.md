@@ -65,18 +65,43 @@ Placeable cards cover a radius. Data products need the target to be **connected*
 
 ## Levels
 
-Three fixed levels, each growing over its rounds. Recipes and rates are Factorio 1.1.
+Level pack 1 has 10 fixed levels with solid items only. Level pack 2 will add oil and other fluids. Recipes and rates are Factorio 1.1. All levels share one layout (`src/sim/blocks.ts`): iron drills and furnaces on top, an assembler row in the middle, copper furnaces and drills below. A level picks which blocks exist and at which stage they appear.
 
-1. **Gear Works.** Iron ore to plates to gears. Then copper cable on the other belt side. Teaches wear, clogs and jams.
-2. **Circuit Plant.** Two lines: iron and copper plates feed cable and circuit assemblers. Adds sensor drift and alarm floods.
-3. **Science Lab.** Gears and copper become red science packs, later green science (inserters and belts). Adds both bosses.
+| # | Level | Rounds | New in this level |
+| --- | --- | --- | --- |
+| 1 | Gear Works | 6 | Wear, clogs, jams. Iron plates to gears |
+| 2 | Copper Lane | 7 | Copper cable on its own belt |
+| 3 | Red Science | 8 | Automation science from gears and copper |
+| 4 | Circuit Plant | 8 | Sensor drift. Cable handed straight into circuits |
+| 5 | Control Room | 8 | Alarm floods |
+| 6 | Belt Works | 8 | Knowledge loss (an operator retires) |
+| 7 | Power Trip | 8 | Plant trips |
+| 8 | Green Science | 9 | Inserters and belts, then logistic science |
+| 9 | Science Lab | 9 | Red then green science, both bosses |
+| 10 | Megafactory | 10 | Everything at once |
+
+Rules every level follows:
+
+- **Stages.** Each new stage is built at the start of a round. A new stage commissions for 60 s with no threats, so belts and buffers fill before orders count.
+- **Orders** sit at about 75 to 80% of what the line makes with no problems. Unfixed threats are what make you miss them.
+- **Cards unlock** level by level, so the shop teaches one product at a time. The first offer always holds Data Fusion, and an offer always holds an answer to a threat type that is new that round.
+- **Stars.** 3 minus strikes. Best stars are kept in the browser.
+
+## Economy
+
+Delivered items pay by value (plates 0.25, gear 2, red science 6, green science 15, and so on). Repairs cost money, more for late repairs. Each crew is paid a wage of $12 per shift, and every extra crew costs $30 more than the last. Without this, hiring crews beat buying Cognite. Rerolling an offer costs $10, plus $5 per earlier reroll in the same build phase.
 
 ## Balance method
 
-`npm run balance` plays every level with several bot policies over many seeds and prints win rates, stars and money curves:
+Bots play every level over many seeds (`tools/`):
 
-- **reactive**: buys only crews. Shows the plant without Cognite.
-- **random**: buys random affordable cards and places them at random valid spots.
-- **greedy**: a heuristic player that values coverage and detection.
+- **reactive** buys only crews. It shows the plant without Cognite.
+- **random** buys random affordable cards and places them at random valid spots.
+- **greedy** is a heuristic player that values coverage and detection per coin.
+- **lookahead** is an oracle that tries each option by replaying the game from the log. It proves a level can be won with good choices.
 
-Targets: greedy wins every level at least 80% of the time; reactive loses levels 2 and 3 most of the time but can survive level 1; random sits in between. No single card should appear in nearly every greedy win.
+`tools/compare.ts` prints win rates and stars per bot across difficulty multipliers. Each level has a `difficulty` multiplier on its threat budget, found by `tools/tune-all.sh`: bisection until greedy wins at a target rate that falls from 97% on level 1 to 75% on level 10. `tools/balance-all.sh` then checks all bots on fresh seeds. The goal is that greedy clearly beats reactive on every level, so buying Cognite is what wins.
+
+## Browser game
+
+`src/game/play.ts` runs the sim and mirrors it into the renderer. It has a level select, a HUD with orders, the shop and forecast, shift reports, and speed controls (1x, 2x, 4x, pause). A data fog covers tiles that no Data Fusion hub connects. `?sandbox` opens the old engine sandbox and `?unlock` unlocks all levels.
