@@ -34,8 +34,12 @@ export interface Problem {
   fixed: boolean;
 }
 
+/** Crews are named after people at Cognite, hired in this order. */
+export const CREW_NAMES = ['Armin', 'Girish', 'Halvard', 'Geir', 'Stein', 'John Markus'];
+
 export interface Crew {
   id: number;
+  name: string;
   x: number;
   y: number;
   job: Problem | null;
@@ -80,6 +84,8 @@ export interface ShiftReport {
   offSpecDelivered: number;
   /** Problems still open and unnoticed when the shift ended. */
   hidden: number;
+  /** Repairs per crew member this shift. */
+  fixesBy: Record<string, number>;
 }
 
 /** Cards that help against each threat, used to make sure a new threat comes with an answer. */
@@ -174,6 +180,7 @@ export class Game {
   private repairCost = 0;
   private spawned: Partial<Record<ProblemType, number>> = {};
   private detectedEarly = 0;
+  private fixesBy: Record<string, number> = {};
   private breakdowns = 0;
   private wear = new Map<Machine, Problem>();
   private drift = new Map<Machine, Problem>();
@@ -363,7 +370,9 @@ export class Game {
 
   private addCrew(): void {
     const [x, y] = this.level.depot;
-    this.crews.push({ id: this.nextId++, x, y, job: null, state: 'idle', workLeft: 0, workCost: 0 });
+    const n = this.crews.length;
+    const name = CREW_NAMES[n % CREW_NAMES.length] + (n >= CREW_NAMES.length ? ` ${Math.floor(n / CREW_NAMES.length) + 1}` : '');
+    this.crews.push({ id: this.nextId++, name, x, y, job: null, state: 'idle', workLeft: 0, workCost: 0 });
   }
 
   private rootCauseAnalysis(): void {
@@ -417,6 +426,7 @@ export class Game {
     this.repairCost = 0;
     this.spawned = {};
     this.detectedEarly = 0;
+    this.fixesBy = {};
     this.breakdowns = 0;
     this.nextSearch = this.tick + SEARCH_PERIOD;
     if (this.has('maintain')) {
@@ -661,7 +671,10 @@ export class Game {
         c.workCost = r.cost * (this.has('infield') ? 0.75 : 1);
         c.state = 'work';
       }
-      if (c.state === 'work' && --c.workLeft <= 0) this.fix(p, c.workCost);
+      if (c.state === 'work' && --c.workLeft <= 0) {
+        this.fixesBy[c.name] = (this.fixesBy[c.name] ?? 0) + 1;
+        this.fix(p, c.workCost);
+      }
     }
   }
 
@@ -689,6 +702,7 @@ export class Game {
       breakdowns: this.breakdowns,
       offSpecDelivered: offSpec,
       hidden: this.openProblems().filter((p) => p.detected === null).length,
+      fixesBy: this.fixesBy,
     });
     // Fixed problems are history now.
     const open = this.openProblems();

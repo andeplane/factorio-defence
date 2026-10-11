@@ -87,6 +87,22 @@ Rules every level follows:
 - **Cards unlock** level by level, so the shop teaches one product at a time. The first offer always holds Data Fusion, and an offer always holds an answer to a threat type that is new that round.
 - **Stars.** 3 minus strikes. Best stars are kept in the browser.
 
+## Complexity ramp
+
+Complexity grows on three axes at once, and each level moves at most one of them a big step:
+
+1. **Production.** Longer recipe chains and more lines sharing belts. A stall upstream now starves more machines downstream.
+2. **Threats.** One new threat or event per level, always with a card that counters it in the first offer that round.
+3. **Tools.** Cards unlock a few per level, so the shop never shows a product before its problem exists.
+
+Level packs repeat the ramp one layer up:
+
+- **Pack 1, solids** (this pack). Plates, gears, cable, circuits, red and green science. Threats on machines, belts and inserters.
+- **Pack 2, fluids.** Pumpjacks, pipes, storage tanks, refineries and chemical plants: crude oil to plastic and sulfur. New threats that suit fluids: leaks, pressure loss, corrosion and tank overflow. Problems spread along a pipe network instead of staying on one tile, so connecting the whole network to Data Fusion matters more.
+- **Pack 3, sites.** Several plants on one map joined by trains, so one site's outage hits another's orders. Problems that only show up when you compare sites.
+
+Each crew member is named after someone at Cognite (Armin, Girish, Halvard, Geir, Stein, John Markus, in order of hiring). The shift report shows who did the repairs.
+
 ## Economy
 
 Delivered items pay by value (plates 0.25, gear 2, red science 6, green science 15, and so on). Repairs cost money, more for late repairs. Each crew is paid a wage of $12 per shift, and every extra crew costs $30 more than the last. Without this, hiring crews beat buying Cognite. Rerolling an offer costs $10, plus $5 per earlier reroll in the same build phase.

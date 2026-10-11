@@ -175,6 +175,7 @@ class LevelScene {
       const y = c.y * TILE_PX;
       if (c.state === 'work') g.circle(x, y, 10 + 4 * pulse).stroke({ color: 0xffa726, width: 2, alpha: 0.8 });
       g.circle(x, y, 7).fill({ color: 0xffa726 }).stroke({ color: 0x1b1b1b, width: 2 });
+      this.label(c.name, c.x, c.y + 18 / TILE_PX, 0xffe0b2, 11);
     }
   }
 
@@ -256,7 +257,7 @@ export async function startGame(parent: HTMLElement): Promise<void> {
       const unlocked = i === 0 || (stars[LEVELS[i - 1].id] ?? 0) > 0 || location.search.includes('unlock');
       const b = el('button', 'level' + (unlocked ? '' : ' locked'));
       const s = stars[level.id] ?? 0;
-      b.append(el('b', '', `${i + 1}. ${level.name}`), el('span', 'stars', '★'.repeat(s) + '☆'.repeat(3 - s)), el('small', '', level.text));
+      b.append(el('b', '', `${i + 1}. ${level.name}`), el('span', 'stars', '★'.repeat(s) + '☆'.repeat(3 - s)), el('small', '', level.text), el('small', 'new', `New: ${level.introduces}`));
       b.disabled = !unlocked;
       b.addEventListener('click', () => startLevel(level));
       grid.appendChild(b);
@@ -291,7 +292,7 @@ export async function startGame(parent: HTMLElement): Promise<void> {
           `<p>Problems will hit your machines, belts and inserters. Crews only fix what someone has noticed. ` +
           `Between shifts, buy Cognite cards to see problems sooner and fix them faster. The grey haze is equipment nobody has data on.</p>`
         : '';
-    showModal(`${level.name}`, `<p>${level.text}</p>${howTo}<p><b>${stage.title}.</b> ${stage.text}</p>`, 'Start');
+    showModal(`${level.name}`, `<p>${level.text}</p><p><b>New:</b> ${level.introduces}</p>${howTo}<p><b>${stage.title}.</b> ${stage.text}</p>`, 'Start');
     renderShop();
   }
 
@@ -428,6 +429,8 @@ export async function startGame(parent: HTMLElement): Promise<void> {
       `Income $${Math.round(r.income)}, repairs $${Math.round(r.repairCost)}, crew wages $${r.wages}`,
       `${r.detectedEarly} problems caught early, ${r.breakdowns} breakdowns`,
     ];
+    const fixes = Object.entries(r.fixesBy).sort((x, y) => y[1] - x[1]);
+    if (fixes.length) lines.push('Repairs: ' + fixes.map(([name, n]) => `${name} ${n}`).join(', '));
     if (r.offSpecDelivered) lines.push(`${r.offSpecDelivered} off-spec items shipped and rejected`);
     if (r.hidden) lines.push(`<span class="warn">${r.hidden} problem${r.hidden === 1 ? ' is' : 's are'} still hidden somewhere in the plant</span>`);
     return `<ul>${rows}</ul><p>${lines.join('<br>')}</p>`;

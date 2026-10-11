@@ -29,6 +29,8 @@ export interface LevelDef {
   id: string;
   name: string;
   text: string;
+  /** The new mechanic this level adds, shown on the level select and the briefing. */
+  introduces: string;
   rounds: number;
   shiftSeconds: number;
   startMoney: number;
