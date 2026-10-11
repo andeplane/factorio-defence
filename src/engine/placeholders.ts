@@ -545,7 +545,49 @@ const ICONS: Record<string, () => PlaceholderAnimation> = {
     ctx.bezierCurveTo(10, 4, 22, 28, 28, 8);
     ctx.stroke();
   }),
+  'icon/electronic-circuit': icon((ctx) => {
+    ctx.fillStyle = '#2f7d32';
+    ctx.fillRect(5, 8, 22, 16);
+    ctx.fillStyle = '#d9c25a';
+    for (let i = 0; i < 4; i++) ctx.fillRect(8 + i * 5, 5, 2, 22);
+    ctx.fillStyle = '#1e1e1e';
+    ctx.fillRect(12, 12, 8, 8);
+  }),
+  'icon/automation-science-pack': flaskIcon('#d8403a'),
+  'icon/logistic-science-pack': flaskIcon('#52b043'),
+  'icon/inserter': icon((ctx) => {
+    ctx.strokeStyle = '#d8a833';
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(8, 26);
+    ctx.lineTo(14, 12);
+    ctx.lineTo(25, 8);
+    ctx.stroke();
+    ctx.fillStyle = '#6b6b6b';
+    ctx.fillRect(4, 25, 10, 4);
+  }),
+  'icon/transport-belt': icon((ctx) => {
+    ctx.fillStyle = '#3a3a3a';
+    ctx.fillRect(4, 10, 24, 12);
+    ctx.fillStyle = '#d8a833';
+    for (let i = 0; i < 4; i++) ctx.fillRect(6 + i * 6, 12, 3, 8);
+  }),
 };
+
+function flaskIcon(color: string) {
+  return icon((ctx) => {
+    ctx.fillStyle = '#d9dde0';
+    ctx.fillRect(13, 4, 6, 8);
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.moveTo(13, 11);
+    ctx.lineTo(6, 27);
+    ctx.lineTo(26, 27);
+    ctx.lineTo(19, 11);
+    ctx.closePath();
+    ctx.fill();
+  });
+}
 
 /** Builders for every animation key the game references. */
 const ANIMATIONS: Record<string, () => PlaceholderAnimation> = {

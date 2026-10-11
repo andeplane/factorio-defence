@@ -326,7 +326,7 @@ export const LEVELS: LevelDef[] = [
         round: 4,
         title: 'Green science',
         text: 'A science assembler between them turns inserters and belts into logistic science packs.',
-        orders: [{ item: 'logistic-science-pack', perShift: 6 }],
+        orders: [{ item: 'logistic-science-pack', perShift: 5 }],
       },
     ],
     threatBudget: (r) => 8 + r * 3,
@@ -375,7 +375,7 @@ export const LEVELS: LevelDef[] = [
         text: 'Cable, circuits, inserters and belts come together into logistic science packs.',
         orders: [
           { item: 'automation-science-pack', perShift: 14 },
-          { item: 'logistic-science-pack', perShift: 6 },
+          { item: 'logistic-science-pack', perShift: 5 },
         ],
       },
     ],
@@ -431,7 +431,7 @@ export const LEVELS: LevelDef[] = [
         text: 'The green science chain comes online.',
         orders: [
           { item: 'automation-science-pack', perShift: 14 },
-          { item: 'logistic-science-pack', perShift: 6 },
+          { item: 'logistic-science-pack', perShift: 5 },
         ],
       },
       {
@@ -440,7 +440,7 @@ export const LEVELS: LevelDef[] = [
         text: 'A circuit line at the end of the row ships circuits to customers.',
         orders: [
           { item: 'automation-science-pack', perShift: 14 },
-          { item: 'logistic-science-pack', perShift: 6 },
+          { item: 'logistic-science-pack', perShift: 5 },
           { item: 'electronic-circuit', perShift: 19 },
         ],
       },

@@ -12,7 +12,10 @@
     "extract-sprites": "bash tools/factorio-extract/extract.sh",
     "balance": "vite-node tools/balance.ts --",
     "capacity": "vite-node tools/capacity.ts",
-    "trace": "vite-node tools/trace.ts --"
+    "trace": "vite-node tools/trace.ts --",
+    "balance:all": "bash tools/balance-all.sh",
+    "tune": "vite-node tools/tune.ts --",
+    "tune:all": "bash tools/tune-all.sh"
   },
   "dependencies": {
     "pixi.js": "^8.22.0"

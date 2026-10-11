@@ -40,8 +40,10 @@ export interface LevelDef {
   /** Places every entity (with its stage) on the world. */
   build(world: World): void;
   stages: Stage[];
-  /** Threat points spent on the shift of a round (1-based). */
+  /** Threat points spent on the shift of a round (1-based), before `difficulty`. */
   threatBudget(round: number): number;
+  /** Multiplier on the threat budget, tuned by `npm run tune` so a good player wins most of the time. */
+  difficulty?: number;
   /** Relative chance of each threat type, and the first round it can appear. */
   threats: Partial<Record<ThreatType, { weight: number; from: number }>>;
   events: BossEvent[];

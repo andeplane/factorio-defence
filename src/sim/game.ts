@@ -374,7 +374,7 @@ export class Game {
   }
 
   private makePlan(): void {
-    let budget = this.level.threatBudget(this.round);
+    let budget = this.level.threatBudget(this.round) * (this.level.difficulty ?? 1);
     const types = (Object.entries(this.level.threats) as [ThreatType, { weight: number; from: number }][]).filter(
       ([, v]) => v.from <= this.round,
     );

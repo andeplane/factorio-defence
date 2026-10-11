@@ -105,9 +105,17 @@ export class BeltLine {
   take(index: number, want: (item: ItemName) => boolean): Stack | null {
     for (let l = 0; l < 2; l++) {
       const items = this.lanes[l];
-      for (let i = 0; i < items.length; i++) {
+      // Items are sorted by position, front first: binary search for the first one inside the tile.
+      let lo = 0;
+      let hi = items.length;
+      while (lo < hi) {
+        const mid = (lo + hi) >> 1;
+        if (items[mid].pos >= index + 1) lo = mid + 1;
+        else hi = mid;
+      }
+      for (let i = lo; i < items.length && items[i].pos >= index; i++) {
         const it = items[i];
-        if (it.pos >= index && it.pos < index + 1 && want(it.item)) {
+        if (want(it.item)) {
           items.splice(i, 1);
           return { item: it.item, off: it.off };
         }

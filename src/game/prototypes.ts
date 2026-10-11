@@ -107,6 +107,18 @@ export const UNITS = {
 };
 
 /** Items the views may draw (icons are preloaded for these). */
-export const ITEM_NAMES = ['iron-ore', 'iron-plate', 'iron-gear-wheel', 'copper-ore', 'copper-plate', 'copper-cable'];
+export const ITEM_NAMES = [
+  'iron-ore',
+  'iron-plate',
+  'iron-gear-wheel',
+  'copper-ore',
+  'copper-plate',
+  'copper-cable',
+  'electronic-circuit',
+  'automation-science-pack',
+  'logistic-science-pack',
+  'inserter',
+  'transport-belt',
+];
 
 export const TILE_NAMES = ['grass-1', 'dirt-1', 'sand-1'];
