@@ -1,6 +1,7 @@
 import { Container, Sprite } from 'pixi.js';
 import type { AssetStore } from './Assets';
 import { TILE_PX, type Camera } from './Camera';
+import { cellTransitions } from './transitions';
 
 export const CHUNK_TILES = 32;
 
@@ -80,9 +81,27 @@ export class TileMap {
         s.position.set(tx * TILE_PX, ty * TILE_PX);
         s.width = TILE_PX;
         s.height = TILE_PX;
-        // Snap to whole screen pixels so fractional zooms don't open seams between tiles.
-        s.roundPixels = true;
         view.addChild(s);
+      }
+    }
+    // Second pass so borders that overhang their cell draw over every base tile.
+    const layers = this.tileNames.map((n) => this.assets.tileLayer(n));
+    const layerOf = (t: number) => layers[t];
+    for (let ty = 0; ty < CHUNK_TILES; ty++) {
+      for (let tx = 0; tx < CHUNK_TILES; tx++) {
+        const wx = cx * CHUNK_TILES + tx;
+        const wy = cy * CHUNK_TILES + ty;
+        for (const [h, piece] of cellTransitions(wx, wy, this.generate, layerOf)) {
+          const set = this.assets.transition(this.tileNames[h], piece);
+          if (!set) continue;
+          const s = new Sprite(set.variants[hash(wx * 7 + piece.length, wy) % set.variants.length]);
+          const size = set.def.size * (set.def.scale ?? 1);
+          s.anchor.set(0.5);
+          s.position.set((tx + 0.5) * TILE_PX, (ty + 0.5) * TILE_PX);
+          s.width = size;
+          s.height = size;
+          view.addChild(s);
+        }
       }
     }
     this.container.addChild(view);

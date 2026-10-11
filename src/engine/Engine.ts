@@ -3,6 +3,7 @@ import { AssetStore } from './Assets';
 import { Camera } from './Camera';
 import { EntityManager } from './Entities';
 import { TileMap, type TileGenerator } from './TileMap';
+import { TRANSITION_PIECES } from './transitions';
 import { UnitManager } from './Units';
 
 export const TICKS_PER_SECOND = 60;
@@ -45,7 +46,8 @@ export class Engine {
     });
     opts.parent.appendChild(this.app.canvas);
     await this.assets.init();
-    await this.assets.preload(opts.animationKeys, opts.tileNames);
+    const tileKeys = opts.tileNames.flatMap((n) => [n, ...TRANSITION_PIECES.map((p) => `${n}/${p}`)]);
+    await this.assets.preload(opts.animationKeys, tileKeys);
 
     this.tiles = new TileMap(this.assets, opts.tileNames, opts.generateTile);
     this.entities = new EntityManager(this.assets);

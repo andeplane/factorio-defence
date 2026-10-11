@@ -1,4 +1,5 @@
 import type { AnimationDef, TileDef } from './manifest';
+import { pieceCoverage, TRANSITION_PIECES, type Corner, type Edge } from './transitions';
 
 /**
  * Procedurally drawn stand-ins for the Factorio graphics, used for any
@@ -385,7 +386,7 @@ function hash(x: number, y: number): number {
   return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
 }
 
-function groundTile(base: [number, number, number], speckle: [number, number, number], variants: number): PlaceholderTile {
+function groundTile(base: [number, number, number], speckle: [number, number, number], variants: number, layer: number): PlaceholderTile {
   const canvas = sheet(PX, PX, variants, variants, (ctx, v) => {
     ctx.fillStyle = `rgb(${base.join(',')})`;
     ctx.fillRect(0, 0, PX, PX);
@@ -397,21 +398,77 @@ function groundTile(base: [number, number, number], speckle: [number, number, nu
       ctx.fillRect(x, y, 2, 2);
     }
   });
+  return { canvas, def: { file: 'placeholder', size: PX, variants, layer } };
+}
+
+/**
+ * Soft-edged piece of `tile` for one transition case: the tile's texture
+ * kept only within a wavy band along the covered edges and a quarter disc at
+ * covered corners. The waves are zero at the cell corners, so pieces in
+ * neighbouring cells line up.
+ */
+function transitionTile(tile: PlaceholderTile, piece: string): PlaceholderTile {
+  const variants = 4;
+  const { edges, corners } = pieceCoverage(piece);
+  const depth = PX * 0.42;
+  const src = tile.canvas.getContext('2d')!.getImageData(0, 0, PX, PX).data;
+  const canvas = document.createElement('canvas');
+  canvas.width = PX * variants;
+  canvas.height = PX;
+  const ctx = canvas.getContext('2d')!;
+  const img = ctx.createImageData(PX * variants, PX);
+  const cornerPos: Record<Corner, [number, number]> = { ne: [PX, 0], se: [PX, PX], sw: [0, PX], nw: [0, 0] };
+  // Distance into the cell from an edge, and position along that edge in [0, 1].
+  const fromEdge = (e: Edge, x: number, y: number): [number, number] =>
+    e === 'north' ? [y, x / PX] : e === 'south' ? [PX - y, x / PX] : e === 'west' ? [x, y / PX] : [PX - x, y / PX];
+  for (let v = 0; v < variants; v++) {
+    const wave = (t: number) =>
+      Math.sin(t * Math.PI) * (Math.sin(t * Math.PI * (2 + v)) * 3 + Math.sin(t * Math.PI * (5 + v) + v) * 1.5);
+    for (let y = 0; y < PX; y++) {
+      for (let x = 0; x < PX; x++) {
+        let inside = -Infinity; // signed distance inside the covered region, in px
+        for (const e of edges) {
+          const [d, t] = fromEdge(e, x + 0.5, y + 0.5);
+          inside = Math.max(inside, depth + wave(t) - d);
+        }
+        for (const c of corners) {
+          const [cx, cy] = cornerPos[c];
+          const d = Math.hypot(x + 0.5 - cx, y + 0.5 - cy);
+          inside = Math.max(inside, depth - d);
+        }
+        const alpha = Math.max(0, Math.min(1, (inside + 1.5) / 3));
+        const si = (y * PX + x) * 4;
+        const di = (y * PX * variants + v * PX + x) * 4;
+        img.data[di] = src[si];
+        img.data[di + 1] = src[si + 1];
+        img.data[di + 2] = src[si + 2];
+        img.data[di + 3] = alpha * 255;
+      }
+    }
+  }
+  ctx.putImageData(img, 0, 0);
   return { canvas, def: { file: 'placeholder', size: PX, variants } };
 }
 
 const TILES: Record<string, () => PlaceholderTile> = {
-  'grass-1': () => groundTile([66, 84, 38], [86, 104, 50], 8),
-  'dirt-1': () => groundTile([110, 86, 56], [128, 102, 68], 8),
-  'sand-1': () => groundTile([168, 140, 92], [186, 158, 108], 8),
+  'grass-1': () => groundTile([66, 84, 38], [86, 104, 50], 8, 26),
+  'dirt-1': () => groundTile([110, 86, 56], [128, 102, 68], 8, 19),
+  'sand-1': () => groundTile([168, 140, 92], [186, 158, 108], 8, 8),
 };
 
 export function placeholderAnimation(key: string): PlaceholderAnimation | undefined {
   return ANIMATIONS[key]?.();
 }
 
+const PIECES = new Set(TRANSITION_PIECES);
+
+/** A ground tile, or a transition piece of one ("grass-1/side/north"). */
 export function placeholderTile(name: string): PlaceholderTile | undefined {
-  return TILES[name]?.();
+  const slash = name.indexOf('/');
+  if (slash < 0) return TILES[name]?.();
+  const base = TILES[name.slice(0, slash)] as (() => PlaceholderTile) | undefined;
+  const piece = name.slice(slash + 1);
+  return base && PIECES.has(piece) ? transitionTile(base(), piece) : undefined;
 }
 
 export const PLACEHOLDER_ANIMATION_KEYS = Object.keys(ANIMATIONS);

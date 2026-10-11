@@ -55,6 +55,11 @@ export interface TileDef {
   /** Number of random variants laid out horizontally. Default 1. */
   variants?: number;
   scale?: number;
+  /**
+   * Draw order between tile types (Factorio's tile `layer`): a tile's
+   * transition pieces are drawn over neighbouring tiles of lower layers.
+   */
+  layer?: number;
 }
 
 export interface AssetManifest {

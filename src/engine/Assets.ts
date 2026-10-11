@@ -77,6 +77,7 @@ export class AssetStore {
     // Drop placeholders built before these images arrived.
     for (const key of keys) if (this.animations.get(key)?.placeholder) this.animations.delete(key);
     for (const name of tiles) if (this.tiles.get(name)?.placeholder) this.tiles.delete(name);
+    this.transitions.clear();
   }
 
   /**
@@ -134,6 +135,35 @@ export class AssetStore {
     });
   }
 
+  private transitions = new Map<string, TileSet | null>();
+
+  /**
+   * Transition piece (e.g. "side/north") of tile `base`, or null when there
+   * is none. Placeholder pieces are only generated for placeholder tiles, so
+   * real Factorio ground never gets placeholder borders.
+   */
+  transition(base: string, piece: string): TileSet | null {
+    const key = `${base}/${piece}`;
+    let set = this.transitions.get(key);
+    if (set === undefined) {
+      set = null;
+      const def = this.manifest?.tiles?.[key];
+      if (def && this.images.has(def.file)) {
+        set = { name: key, def, variants: tileVariants(this.images.get(def.file)!, def), placeholder: false };
+      } else if (this.tile(base).placeholder) {
+        const ph = placeholderTile(key);
+        if (ph) set = { name: key, def: ph.def, variants: tileVariants(Texture.from(ph.canvas), ph.def, 'nearest'), placeholder: true };
+      }
+      this.transitions.set(key, set);
+    }
+    return set;
+  }
+
+  /** Factorio tile layer: higher layers draw their borders over lower ones. */
+  tileLayer(name: string): number {
+    return this.tile(name).def.layer ?? 0;
+  }
+
   private buildTile(name: string): TileSet {
     const def = this.manifest?.tiles?.[name];
     if (def && this.images.has(def.file)) {
@@ -142,9 +172,7 @@ export class AssetStore {
     }
     const ph = placeholderTile(name);
     if (!ph) throw new Error(`Unknown tile "${name}" (not in manifest, no placeholder)`);
-    const base = Texture.from(ph.canvas);
-    base.source.scaleMode = 'nearest';
-    return { name, def: ph.def, variants: tileVariants(base, ph.def), placeholder: true };
+    return { name, def: ph.def, variants: tileVariants(Texture.from(ph.canvas), ph.def, 'nearest'), placeholder: true };
   }
 }
 
@@ -152,11 +180,37 @@ function sub(tex: Texture, x: number, y: number, w: number, h: number): Texture 
   return new Texture({ source: tex.source, frame: new Rectangle(tex.frame.x + x, tex.frame.y + y, w, h) });
 }
 
-function tileVariants(img: Texture, def: TileDef): Texture[] {
+/**
+ * Splits a tile's variants into textures. Each variant is copied into its own
+ * cell of a new atlas with a 1 px border repeating its edge pixels, so linear
+ * filtering at tile edges never samples the neighbouring variant (that bleed
+ * shows up as seams between tiles).
+ */
+function tileVariants(img: Texture, def: TileDef, scaleMode: 'linear' | 'nearest' = 'linear'): Texture[] {
   const n = def.variants ?? 1;
-  const out: Texture[] = [];
-  for (let i = 0; i < n; i++) out.push(sub(img, (def.x ?? 0) + i * def.size, def.y ?? 0, def.size, def.size));
-  return out;
+  const size = def.size;
+  const cell = size + 2;
+  const src = img.source.resource as CanvasImageSource;
+  const x0 = img.frame.x + (def.x ?? 0);
+  const y0 = img.frame.y + (def.y ?? 0);
+  const canvas = document.createElement('canvas');
+  canvas.width = cell * n;
+  canvas.height = cell;
+  const ctx = canvas.getContext('2d')!;
+  ctx.imageSmoothingEnabled = false;
+  for (let i = 0; i < n; i++) {
+    const sx = x0 + i * size;
+    const dx = i * cell + 1;
+    ctx.drawImage(src, sx, y0, size, size, dx, 1, size, size);
+    // Extrude the edges into the border.
+    ctx.drawImage(canvas, dx, 1, size, 1, dx, 0, size, 1);
+    ctx.drawImage(canvas, dx, size, size, 1, dx, size + 1, size, 1);
+    ctx.drawImage(canvas, dx, 0, 1, cell, dx - 1, 0, 1, cell);
+    ctx.drawImage(canvas, dx + size - 1, 0, 1, cell, dx + size, 0, 1, cell);
+  }
+  const atlas = Texture.from(canvas);
+  atlas.source.scaleMode = scaleMode;
+  return Array.from({ length: n }, (_, i) => sub(atlas, i * cell + 1, 1, size, size));
 }
 
 async function loadManifest(url: string): Promise<AssetManifest | null> {

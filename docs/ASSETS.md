@@ -62,7 +62,8 @@ copied from `data/base/prototypes/entity/*.lua`. For 1.1 entities use the
   },
   "tiles": {
     // Optional. A row of `variants` square images, `size` px each.
-    "grass-1": { "file": "base/graphics/terrain/grass-1/hr-grass-1.png", "size": 64, "variants": 16, "scale": 0.5 }
+    "grass-1": { "file": "tiles/grass-1.png", "size": 64, "variants": 16, "scale": 0.5, "layer": 26 },
+    "grass-1/side/north": { "file": "tiles/grass-1-side-north.png", "size": 64, "variants": 8, "scale": 0.5 }
   }
 }
 ```
@@ -92,7 +93,28 @@ at `x`, `y`. Pre-slice each tile's variant row into its own image (e.g.
 `tiles/grass-1.png`) rather than pointing into Factorio's terrain sheets:
 with linear filtering, the GPU samples a little past each variant's edge, so
 neighbouring rows or transparent padding in a shared sheet bleed in and show
-up as seams between tiles.
+up as seams between tiles. The engine also copies each variant into its own
+padded cell at load time, so variants in one row cannot bleed into each other.
+
+### Tile transitions
+
+Each base tile entry carries Factorio's `layer`. Where a tile borders one of
+a lower layer, the lower cell gets overlay pieces cut from the higher tile,
+chosen from which of its edges and corners touch the higher tile (anything
+at or above that layer counts, so borders run on under even higher tiles):
+
+| key | the higher tile H lies |
+| --- | --- |
+| `H/side/<north\|east\|south\|west>` | across that one edge |
+| `H/inner_corner/<ne\|se\|sw\|nw>` | along both edges meeting at that corner |
+| `H/u_transition/<edge>` | along three edges; `<edge>` is the open one |
+| `H/o_transition` | along all four edges |
+| `H/outer_corner/<ne\|se\|sw\|nw>` | only diagonally, with neither adjacent edge H |
+
+Two opposite edges draw two `side` pieces. Pieces are ordinary tile entries
+(final RGBA colour, a row of `variants`), drawn centred on the cell at
+`size * scale` world px (32 = one tile). Missing pieces are skipped; real
+Factorio tiles never get placeholder borders.
 
 ### Directional layers
 
