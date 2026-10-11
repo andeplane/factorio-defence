@@ -31,7 +31,12 @@ TypeScript + [PixiJS 8](https://pixijs.com) (WebGL) + Vite.
 ## Graphics
 
 With no extra setup the game draws generated placeholder graphics. To use
-Factorio's own graphics from your local install, put them in
-`public/assets/factorio/` with a `manifest.json`; see
+Factorio's own graphics, extract them from your local install:
+
+```sh
+FACTORIO_PATH="/path/to/Factorio" npm run extract-sprites
+```
+
+This writes `public/assets/factorio/` with a `manifest.json`; see
 [docs/ASSETS.md](docs/ASSETS.md). That folder is gitignored: Factorio's
 graphics are © Wube Software and must not be committed.

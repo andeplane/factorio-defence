@@ -6,6 +6,37 @@ with generated placeholder graphics otherwise, so the repo runs for anyone.
 **Factorio's graphics are © Wube Software and must never be committed.**
 `public/assets/factorio/` is gitignored for this reason.
 
+## Extracting from your Factorio install
+
+```sh
+FACTORIO_PATH="$HOME/Library/Application Support/Steam/steamapps/common/Factorio" npm run extract-sprites
+```
+
+`FACTORIO_PATH` can be the install folder, `factorio.app`, or its `data`
+directory. Leave it unset to try the usual Steam and standalone locations on
+macOS, Linux and Windows (Git Bash/WSL). It needs `lua` (5.2 or newer),
+`python3` with Pillow, and `rsync`. Only Factorio 1.1 has been tested.
+
+The script (`tools/factorio-extract/`) runs the game's own Lua prototype
+definitions (`data/core` and `data/base`) outside the game, so every size,
+frame count and shift in the manifest comes from the game data:
+
+1. `load.lua` runs Factorio's data stage and builds `data.raw`.
+2. `dump.lua` keeps the graphics of the prototypes a tower defence needs
+   (belts, inserters, machines, fluids, power, turrets, walls, enemies,
+   resources, tiles, projectiles, explosions, icons), prefers the
+   `hr_version` sprites, and writes them to `prototypes.json` along with
+   the list of image files they use.
+3. The referenced images and all icons are copied into
+   `public/assets/factorio/`.
+4. `convert.py` flattens `prototypes.json` into `manifest.json` (the format
+   below). It also cuts each tile's variant row into `tiles/<name>.png`, and
+   pre-composites the 1.1 transition masks with the tile texture into
+   `tiles/<name>-<piece>-<dir>.png`.
+
+`prototypes.json` holds the full sprite trees (all layers and fields), for
+anything the flat manifest leaves out.
+
 ## Layout
 
 ```
@@ -18,8 +49,8 @@ public/assets/factorio/
 
 Image paths in the manifest are relative to `public/assets/factorio/` and
 keep Factorio's `__base__/graphics/...` path with `__base__` written as
-`base` (e.g. `base/graphics/entity/...`). Copy the files from a local install
-(`Factorio.app/Contents/data/base/graphics/` on macOS) keeping those paths.
+`base` (e.g. `base/graphics/entity/...`). Derived tile images live in
+`tiles/`.
 
 Only the images behind the keys the game actually uses are fetched at
 startup (`AssetStore.preload`), so the manifest can describe every sprite in
