@@ -67,8 +67,8 @@ export const reactiveBot: Bot = {
   build(game) {
     for (;;) {
       const i = game.offer.indexOf('crew');
-      if (i < 0 || game.money < CARDS.crew.price + 30 || game.crews.length >= 4) {
-        if (game.crews.length < 4 && game.money >= game.rerollCost() + CARDS.crew.price + 30 && game.reroll()) continue;
+      if (i < 0 || game.money < game.priceOf('crew') + 30 || game.crews.length >= 4) {
+        if (game.crews.length < 4 && game.money >= game.rerollCost() + game.priceOf('crew') + 30 && game.reroll()) continue;
         return;
       }
       game.buy(i);
@@ -83,7 +83,7 @@ export function randomBot(seed: number): Bot {
     name: 'random',
     build(game) {
       for (let tries = 0; tries < 10; tries++) {
-        const affordable = game.offer.map((c, i) => [c, i] as const).filter(([c]) => CARDS[c].price <= game.money);
+        const affordable = game.offer.map((c, i) => [c, i] as const).filter(([c]) => game.priceOf(c) <= game.money);
         if (!affordable.length || rng.next() < 0.25) return;
         const [card, i] = rng.pick(affordable);
         let at: [number, number] | undefined;
@@ -142,7 +142,7 @@ export const greedyBot: Bot = {
     for (let guard = 0; guard < 12; guard++) {
       let best: { i: number; perCoin: number; at?: [number, number] } | null = null;
       game.offer.forEach((card, i) => {
-        const price = CARDS[card].price;
+        const price = game.priceOf(card);
         if (price > game.money - 15) return;
         const v = cardValue(game, card);
         if (CARDS[card].placed && !v.at) return;
@@ -179,7 +179,7 @@ export const lookaheadBot: Bot = {
       let best = playOut(Game.replay(game.level, game.seed, game.log));
       let bestAction: { i: number; at?: [number, number] } | null = null;
       game.offer.forEach((card, i) => {
-        if (CARDS[card].price > game.money) return;
+        if (game.priceOf(card) > game.money) return;
         const v = cardValue(game, card);
         if (CARDS[card].placed && !v.at) return;
         const g = Game.replay(game.level, game.seed, game.log);

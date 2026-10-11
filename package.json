@@ -15,7 +15,8 @@
     "trace": "vite-node tools/trace.ts --",
     "balance:all": "bash tools/balance-all.sh",
     "tune": "vite-node tools/tune.ts --",
-    "tune:all": "bash tools/tune-all.sh"
+    "tune:all": "bash tools/tune-all.sh",
+    "compare": "vite-node tools/compare.ts --"
   },
   "dependencies": {
     "pixi.js": "^8.22.0"

@@ -374,8 +374,9 @@ export async function startGame(parent: HTMLElement): Promise<void> {
     g.offer.forEach((id, i) => {
       const def = CARDS[id];
       const c = el('button', 'card');
-      c.disabled = g.money < def.price;
-      c.append(el('b', '', def.name), el('span', 'price', `$${def.price}`), el('small', '', def.text));
+      const price = g.priceOf(id);
+      c.disabled = g.money < price;
+      c.append(el('b', '', def.name), el('span', 'price', `$${price}`), el('small', '', def.text));
       c.addEventListener('click', () => {
         if (def.placed) {
           placing = { index: i, card: id };
@@ -424,7 +425,7 @@ export async function startGame(parent: HTMLElement): Promise<void> {
       .map((o) => `<li>${ITEM_LABEL[o.item] ?? o.item}: ${o.delivered}/${o.perShift} ${o.met ? '✓' : '<span class="warn">missed</span>'}</li>`)
       .join('');
     const lines = [
-      `Income $${Math.round(r.income)}, repairs $${Math.round(r.repairCost)}`,
+      `Income $${Math.round(r.income)}, repairs $${Math.round(r.repairCost)}, crew wages $${r.wages}`,
       `${r.detectedEarly} problems caught early, ${r.breakdowns} breakdowns`,
     ];
     if (r.offSpecDelivered) lines.push(`${r.offSpecDelivered} off-spec items shipped and rejected`);

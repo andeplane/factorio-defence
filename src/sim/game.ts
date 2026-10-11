@@ -73,6 +73,7 @@ export interface ShiftReport {
   orders: OrderResult[];
   income: number;
   repairCost: number;
+  wages: number;
   spawned: Partial<Record<ProblemType, number>>;
   detectedEarly: number;
   breakdowns: number;
@@ -91,6 +92,10 @@ const COUNTERS: Record<ThreatType | BossEvent['type'], CardId[]> = {
   trip: ['simulators'],
   'knowledge-loss': ['data-fusion'],
 };
+
+/** Paid per crew at the end of every shift. */
+export const CREW_WAGE = 12;
+const CREW_PRICE_STEP = 30;
 
 const DISPATCH_DELAY = 6 * TICKS_PER_SECOND;
 const CREW_SPEED = 4 / TICKS_PER_SECOND;
@@ -294,6 +299,12 @@ export class Game {
     this.offer = offer;
   }
 
+  /** Card price; each extra crew costs more to hire than the last. */
+  priceOf(card: CardId): number {
+    const base = CARDS[card].price;
+    return card === 'crew' ? base + CREW_PRICE_STEP * (this.owned.get('crew') ?? 0) : base;
+  }
+
   rerollCost(): number {
     return 10 + 5 * this.rerolls;
   }
@@ -329,7 +340,8 @@ export class Game {
     const card = this.offer[index];
     if (!card) return 'No such card';
     const def = CARDS[card];
-    if (this.money < def.price) return 'Not enough money';
+    const price = this.priceOf(card);
+    if (this.money < price) return 'Not enough money';
     if (def.placed) {
       if (!at) return 'Choose where to place it';
       const err = this.placementError(card, at[0], at[1]);
@@ -340,9 +352,9 @@ export class Game {
       this.placed.push({ uid, card, x: at[0], y: at[1], size, radius, cx: at[0] + size / 2, cy: at[1] + size / 2 });
     }
     this.log.push({ type: 'buy', index, at });
-    this.money -= def.price;
+    this.money -= price;
     this.owned.set(card, (this.owned.get(card) ?? 0) + 1);
-    this.spendLog.push({ round: this.round, card, price: def.price });
+    this.spendLog.push({ round: this.round, card, price });
     this.offer.splice(index, 1);
     if (card === 'crew') this.addCrew();
     if (card === 'canvas') this.rootCauseAnalysis();
@@ -654,6 +666,8 @@ export class Game {
   }
 
   private endShift(): void {
+    const wages = CREW_WAGE * this.crews.length;
+    this.money -= wages;
     // The quality lab finds drifting sensors from the shift's off-spec output, too late to save it.
     for (const p of this.problems)
       if (p.type === 'drift' && !p.fixed && p.detected === null && this.tick - p.start > 30 * TICKS_PER_SECOND)
@@ -669,6 +683,7 @@ export class Game {
       orders,
       income: this.income,
       repairCost: this.repairCost,
+      wages,
       spawned: this.spawned,
       detectedEarly: this.detectedEarly,
       breakdowns: this.breakdowns,
