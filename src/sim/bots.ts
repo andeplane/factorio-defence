@@ -123,7 +123,7 @@ function cardValue(game: Game, card: CardId): { value: number; at?: [number, num
     case 'atlas-ai':
       return { value: (levelHas('drift') ? 30 : 0) + (levelHas('flood') ? 30 : 0) + 15 };
     case 'canvas':
-      return { value: 30 };
+      return { value: 22 };
     case 'maintain':
       return { value: 50 };
     case 'simulators':

@@ -76,13 +76,23 @@ export interface ShiftReport {
   offSpecDelivered: number;
 }
 
+/** Cards that help against each threat, used to make sure a new threat comes with an answer. */
+const COUNTERS: Record<ThreatType | BossEvent['type'], CardId[]> = {
+  wear: ['charts', 'asset-data-insights', 'inrobot', 'maintain'],
+  clog: ['charts', 'inrobot', 'flows'],
+  jam: ['charts', 'inrobot', 'flows'],
+  drift: ['charts', 'search', 'atlas-ai'],
+  flood: ['atlas-ai'],
+  trip: ['simulators'],
+  'knowledge-loss': ['data-fusion'],
+};
+
 const DISPATCH_DELAY = 6 * TICKS_PER_SECOND;
 const CREW_SPEED = 4 / TICKS_PER_SECOND;
 const SEARCH_PERIOD = 20 * TICKS_PER_SECOND;
 const TRIP_SECONDS = 12;
-const WARMUP_SECONDS = 30;
-/** On a stage's first shift its new products are still ramping up, so their orders are smaller. */
-const RAMP_UP = 0.8;
+/** New equipment is commissioned (run without problems or deliveries) before its first shift. */
+const COMMISSION_SECONDS = 60;
 
 /** Repair time in seconds and cost, by problem. */
 function repairOf(p: Problem): { seconds: number; cost: number } {
@@ -166,10 +176,6 @@ export class Game {
     this.world.finish();
     this.money = level.startMoney;
     for (let i = 0; i < level.crews; i++) this.addCrew();
-    // The plant is already running when the player takes over: fill the belts first.
-    this.world.stage = 1;
-    for (let t = 0; t < WARMUP_SECONDS * TICKS_PER_SECOND; t++)
-      this.world.step(this.rng, () => {}, () => 1, () => 0, () => true);
     this.beginBuild();
   }
 
@@ -219,16 +225,24 @@ export class Game {
 
   private beginBuild(): void {
     this.phase = 'build';
-    this.world.stage = this.stage;
-    const stage = this.level.stages[this.stage - 1];
-    const before = new Set(this.stage > 1 ? this.level.stages[this.stage - 2].orders.map((o) => o.item) : []);
-    this.orders = stage.orders.map((o) =>
-      stage.round === this.round && !before.has(o.item) ? { ...o, perShift: Math.ceil(o.perShift * RAMP_UP) } : o,
-    );
+    if (this.world.stage !== this.stage || this.round === 1) {
+      this.world.stage = this.stage;
+      this.commission();
+    }
+    this.orders = this.level.stages[this.stage - 1].orders;
     this.events = this.level.events.filter((e) => e.round === this.round);
     this.rerolls = 0;
     this.makeOffer();
     this.makePlan();
+  }
+
+  /**
+   * Runs the factory for a while with problems paused and deliveries not counted, so a new stage
+   * (or the plant at the start) is up to speed when the player's shift begins.
+   */
+  private commission(): void {
+    for (let t = 0; t < COMMISSION_SECONDS * TICKS_PER_SECOND; t++)
+      this.world.step(this.rng, () => {}, () => 1, () => 0, () => true);
   }
 
   private eligible(card: CardId): boolean {
@@ -244,6 +258,17 @@ export class Game {
     const offer: CardId[] = [];
     // The first offer always includes Data Fusion, since most products build on it.
     if (!this.has('data-fusion') && pool.includes('data-fusion')) offer.push('data-fusion');
+    // A threat or event that is new this round comes with at least one card that answers it.
+    const fresh: (ThreatType | BossEvent['type'])[] = [
+      ...(Object.entries(this.level.threats) as [ThreatType, { from: number }][])
+        .filter(([, v]) => v.from === this.round)
+        .map(([t]) => t),
+      ...this.events.map((e) => e.type),
+    ];
+    for (const t of fresh) {
+      const answers = COUNTERS[t].filter((c) => pool.includes(c));
+      if (answers.length && !answers.some((c) => offer.includes(c)) && offer.length < 3) offer.push(this.rng.pick(answers));
+    }
     while (offer.length < 3 && offer.length < pool.length) {
       const c = this.rng.pick(pool);
       if (!offer.includes(c)) offer.push(c);
@@ -506,7 +531,7 @@ export class Game {
     p.detected = this.tick;
     p.detectedBy = by;
     p.orderAt = this.tick + (this.has('flows') ? 0 : DISPATCH_DELAY);
-    if (by !== 'breakdown' && by !== 'operator' && by !== 'alarm') this.detectedEarly++;
+    if (by !== 'breakdown' && by !== 'operator' && by !== 'alarm' && by !== 'quality-report') this.detectedEarly++;
     if (this.has('atlas-ai')) {
       if (p.type === 'false-alarm') this.fix(p, 0);
       else if (p.type === 'drift') p.remoteFixAt = this.tick + 5 * TICKS_PER_SECOND;
@@ -608,6 +633,10 @@ export class Game {
   }
 
   private endShift(): void {
+    // The quality lab finds drifting sensors from the shift's off-spec output, too late to save it.
+    for (const p of this.problems)
+      if (p.type === 'drift' && !p.fixed && p.detected === null && this.tick - p.start > 30 * TICKS_PER_SECOND)
+        this.markDetected(p, 'quality-report');
     const orders: OrderResult[] = this.orders.map((o) => {
       const delivered = this.deliveredThisShift(o.item);
       return { ...o, delivered, met: delivered >= o.perShift };

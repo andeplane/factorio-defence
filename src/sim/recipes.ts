@@ -66,15 +66,15 @@ export const RECIPES: Record<string, Recipe> = {
 export const ITEM_VALUE: Record<ItemName, number> = {
   'iron-ore': 0,
   'copper-ore': 0,
-  'iron-plate': 0.5,
-  'copper-plate': 0.5,
-  'iron-gear-wheel': 3,
-  'copper-cable': 1,
-  'electronic-circuit': 6,
-  'automation-science-pack': 12,
-  inserter: 10,
-  'transport-belt': 4,
-  'logistic-science-pack': 30,
+  'iron-plate': 0.25,
+  'copper-plate': 0.25,
+  'iron-gear-wheel': 2,
+  'copper-cable': 0.5,
+  'electronic-circuit': 3,
+  'automation-science-pack': 6,
+  inserter: 4,
+  'transport-belt': 2,
+  'logistic-science-pack': 15,
 };
 
 /** Crafting speeds from Factorio 1.1. */

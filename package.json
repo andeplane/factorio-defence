@@ -11,7 +11,8 @@
     "test": "vitest run",
     "extract-sprites": "bash tools/factorio-extract/extract.sh",
     "balance": "vite-node tools/balance.ts --",
-    "capacity": "vite-node tools/capacity.ts"
+    "capacity": "vite-node tools/capacity.ts",
+    "trace": "vite-node tools/trace.ts --"
   },
   "dependencies": {
     "pixi.js": "^8.22.0"
