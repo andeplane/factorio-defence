@@ -55,6 +55,9 @@ export interface PlacedCard {
   cy: number;
 }
 
+/** A player action, enough to replay a game from its seed. */
+export type Action = { type: 'buy'; index: number; at?: readonly [number, number] } | { type: 'reroll' } | { type: 'shift' };
+
 export interface PlannedThreat {
   second: number;
   type: ThreatType;
@@ -151,6 +154,8 @@ export class Game {
   readonly problems: Problem[] = [];
   readonly reports: ShiftReport[] = [];
   readonly spendLog: { round: number; card: CardId; price: number }[] = [];
+  /** Every successful action, in order. `Game.replay` rebuilds the same state from it. */
+  readonly log: Action[] = [];
   /** Spawn weight multipliers from Industrial Canvas root cause analyses. */
   readonly rca = new Map<ThreatType, number>();
   knowledgeLoss = false;
@@ -169,7 +174,7 @@ export class Game {
 
   constructor(
     readonly level: LevelDef,
-    seed: number,
+    readonly seed: number,
   ) {
     this.rng = new Rng(seed);
     level.build(this.world);
@@ -177,6 +182,17 @@ export class Game {
     this.money = level.startMoney;
     for (let i = 0; i < level.crews; i++) this.addCrew();
     this.beginBuild();
+  }
+
+  /** Rebuilds a game from its seed and action log, ending in the build phase after the last action. */
+  static replay(level: LevelDef, seed: number, actions: readonly Action[]): Game {
+    const g = new Game(level, seed);
+    for (const a of actions) {
+      if (a.type === 'buy') g.buy(a.index, a.at);
+      else if (a.type === 'reroll') g.reroll();
+      else g.runShift();
+    }
+    return g;
   }
 
   // ---- Queries ---------------------------------------------------------------
@@ -284,6 +300,7 @@ export class Game {
     if (this.phase !== 'build' || this.money < this.rerollCost()) return false;
     this.money -= this.rerollCost();
     this.rerolls++;
+    this.log.push({ type: 'reroll' });
     this.makeOffer();
     return true;
   }
@@ -320,6 +337,7 @@ export class Game {
       this.world.claim(at[0], at[1], size, uid);
       this.placed.push({ uid, card, x: at[0], y: at[1], size, radius, cx: at[0] + size / 2, cy: at[1] + size / 2 });
     }
+    this.log.push({ type: 'buy', index, at });
     this.money -= def.price;
     this.owned.set(card, (this.owned.get(card) ?? 0) + 1);
     this.spendLog.push({ round: this.round, card, price: def.price });
@@ -377,6 +395,7 @@ export class Game {
 
   startShift(): void {
     if (this.phase !== 'build') return;
+    this.log.push({ type: 'shift' });
     this.phase = 'shift';
     this.shiftTick = 0;
     this.delivered.clear();

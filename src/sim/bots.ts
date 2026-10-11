@@ -1,5 +1,5 @@
 import { CARDS, type CardId } from './cards';
-import type { Game } from './game';
+import { Game } from './game';
 import { Rng } from './rng';
 
 /** A player strategy for the build phase. The shift itself runs on its own. */
@@ -155,6 +155,44 @@ export const greedyBot: Bot = {
       }
       const b: { i: number; at?: [number, number] } = best;
       if (game.buy(b.i, b.at)) return;
+    }
+  },
+};
+
+/**
+ * Upper bound for balancing: tries each purchase by playing the rest of the level out (with the
+ * greedy bot) and keeps the best. It sees the future, so no human can beat it.
+ */
+export const lookaheadBot: Bot = {
+  name: 'lookahead',
+  build(game) {
+    const score = (g: Game) => (g.phase === 'won' ? 10000 + g.stars * 1000 : g.reports.length * 500) + g.money;
+    const playOut = (g: Game) => {
+      g.runShift();
+      while (g.phase === 'build') {
+        greedyBot.build(g);
+        g.runShift();
+      }
+      return score(g);
+    };
+    for (let guard = 0; guard < 6; guard++) {
+      let best = playOut(Game.replay(game.level, game.seed, game.log));
+      let bestAction: { i: number; at?: [number, number] } | null = null;
+      game.offer.forEach((card, i) => {
+        if (CARDS[card].price > game.money) return;
+        const v = cardValue(game, card);
+        if (CARDS[card].placed && !v.at) return;
+        const g = Game.replay(game.level, game.seed, game.log);
+        if (g.buy(i, v.at)) return;
+        const s = playOut(g);
+        if (s > best) {
+          best = s;
+          bestAction = { i, at: v.at };
+        }
+      });
+      if (!bestAction) return;
+      const a: { i: number; at?: [number, number] } = bestAction;
+      if (game.buy(a.i, a.at)) return;
     }
   },
 };
