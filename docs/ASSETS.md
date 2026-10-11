@@ -83,6 +83,15 @@ copied from `data/base/prototypes/entity/*.lua`. For 1.1 entities use the
 | `drawAsShadow` | false | render in the shadow layer |
 | `additive` | false | additive blending (lights, glow) |
 | `runMode` | forward | `forward`, `backward`, `forward-then-backward` |
+| `tint` | – | colour multiplied into the layer, `{r,g,b,a}` or `[r,g,b,a]`, 0-1 or 0-255 (masks) |
+
+### Directional layers
+
+Sheets with several directions (units, turret guns) are split into one key
+per direction as `<key>/dir/<d>`, with `d = 0` facing north and counting
+clockwise (16 directions for units, 64 for turrets). Prototypes refer to them
+as `<key>/dir/{dir}` and the engine picks `d` from the thing's orientation.
+Mask layers (`/2`, `/3`) are greyscale and get their colour from `tint`.
 
 ### Keys the game uses today
 
@@ -90,7 +99,12 @@ copied from `data/base/prototypes/entity/*.lua`. For 1.1 entities use the
 `transport-belt/west`, the eight curves `transport-belt/<from>_to_<to>`
 (e.g. `transport-belt/east_to_north`: moving east, turning north, as in
 `transport-belt-pictures.lua`), `assembling-machine-1`, `assembling-machine-1/shadow`,
-`radar`, `radar/shadow`, `wooden-chest`; tiles `grass-1`, `dirt-1`, `sand-1`.
+`radar`, `radar/shadow`, `wooden-chest`, `pumpjack`, `pumpjack/shadow`,
+`pumpjack/north`, `pumpjack/north/shadow`, `gun-turret`, `gun-turret/shadow`,
+`gun-turret/2`, `gun-turret/attacking_animation[/shadow|/2]/dir/{0-63}`,
+`small-biter[/shadow|/2|/3]/dir/{0-15}` and the same for `medium-biter`;
+tiles `grass-1`, `dirt-1`, `sand-1`. Layers that are neither in the manifest
+nor have a placeholder are skipped and listed in one console warning.
 
 Fields the engine does not use yet (`directionCount`, `repeatCount`,
 `variationCount`, `tint`, `applyRuntimeTint`, ...) are allowed and ignored.

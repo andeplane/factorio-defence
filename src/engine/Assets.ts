@@ -25,7 +25,7 @@ export interface TileSet {
  */
 export class AssetStore {
   private manifest: AssetManifest | null = null;
-  private animations = new Map<string, Animation>();
+  private animations = new Map<string, Animation | null>();
   private tiles = new Map<string, TileSet>();
   private images = new Map<string, Texture>();
 
@@ -79,9 +79,13 @@ export class AssetStore {
     for (const name of tiles) if (this.tiles.get(name)?.placeholder) this.tiles.delete(name);
   }
 
-  animation(key: string): Animation {
+  /**
+   * The animation for `key`: from the manifest, else its placeholder, else
+   * null (the layer is simply not drawn, e.g. a tint mask without art).
+   */
+  animation(key: string): Animation | null {
     let anim = this.animations.get(key);
-    if (!anim) {
+    if (anim === undefined) {
       anim = this.buildAnimation(key);
       this.animations.set(key, anim);
     }
@@ -97,7 +101,7 @@ export class AssetStore {
     return set;
   }
 
-  private buildAnimation(key: string): Animation {
+  private buildAnimation(key: string): Animation | null {
     const def = this.manifest?.animations[key];
     if (def) {
       const rects = frameRects(def);
@@ -110,10 +114,24 @@ export class AssetStore {
       }
     }
     const ph = placeholderAnimation(key);
-    if (!ph) throw new Error(`Unknown animation "${key}" (not in manifest, no placeholder)`);
+    if (!ph) {
+      if (this.manifest) this.reportMissing(key);
+      return null;
+    }
     const base = Texture.from(ph.canvas);
     const frames = frameRects(ph.def).map((r) => sub(base, r.x, r.y, r.width, r.height));
     return { key, def: ph.def, frames, placeholder: true };
+  }
+
+  private missing: string[] = [];
+
+  /** Logs layers missing from the manifest once, batched, rather than one line per direction. */
+  private reportMissing(key: string): void {
+    if (this.missing.push(key) > 1) return;
+    setTimeout(() => {
+      console.warn(`[assets] ${this.missing.length} layers are not in the manifest and have no placeholder:`, this.missing);
+      this.missing = [];
+    });
   }
 
   private buildTile(name: string): TileSet {

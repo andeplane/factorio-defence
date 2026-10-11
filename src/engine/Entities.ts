@@ -1,7 +1,7 @@
-import { Container, Sprite } from 'pixi.js';
-import type { Animation, AssetStore } from './Assets';
+import { Container } from 'pixi.js';
+import type { AssetStore } from './Assets';
 import { TILE_PX } from './Camera';
-import { frameAt } from './manifest';
+import { expandKey, SpriteStack } from './SpriteStack';
 
 export type Direction = 'north' | 'east' | 'south' | 'west';
 export const DIRECTIONS: Direction[] = ['north', 'east', 'south', 'west'];
@@ -17,9 +17,12 @@ export interface EntityPrototype {
   rotatable: boolean;
   /**
    * Animation keys drawn bottom to top. Either one list for every direction,
-   * or a list per direction.
+   * or a list per direction. A key containing `{dir}` is a directional layer
+   * (e.g. a turret's gun) picked from the entity's orientation, with
+   * `directionCount` variants.
    */
   layers: string[] | Record<Direction, string[]>;
+  directionCount?: number;
   /**
    * Picks layers from the surroundings (e.g. belt curves). Re-evaluated when
    * the entity or one of its neighbours is placed or removed. Falls back to
@@ -33,19 +36,17 @@ export interface EntityPrototype {
 /** All animation keys a prototype can show, for `AssetStore.preload`. */
 export function prototypeKeys(proto: EntityPrototype): string[] {
   const base = Array.isArray(proto.layers) ? proto.layers : Object.values(proto.layers).flat();
-  return [...new Set([...base, ...(proto.extraKeys ?? [])])];
-}
-
-interface Layer {
-  anim: Animation;
-  sprite: Sprite;
+  const keys = [...base, ...(proto.extraKeys ?? [])].flatMap((k) => expandKey(k, proto.directionCount ?? 1));
+  return [...new Set(keys)];
 }
 
 export class Entity {
-  layers: Layer[] = [];
+  stack: SpriteStack | null = null;
   layerKeys: string[] = [];
   /** Animations only advance while the entity is working. */
   working = true;
+  /** Turns, 0 = north, clockwise. Selects the frame set of `{dir}` layers. */
+  orientation = 0;
 
   constructor(
     readonly id: number,
@@ -73,18 +74,6 @@ export function layerKeys(proto: EntityPrototype, dir: Direction): string[] {
   return Array.isArray(proto.layers) ? proto.layers : proto.layers[dir];
 }
 
-/** Builds a sprite for an animation, positioned relative to an entity's centre. */
-export function makeLayerSprite(anim: Animation, centreX: number, centreY: number): Sprite {
-  const s = new Sprite(anim.frames[0]);
-  const scale = anim.def.scale ?? 1;
-  const [sx, sy] = anim.def.shift ?? [0, 0];
-  s.anchor.set(0.5);
-  s.scale.set(scale);
-  s.position.set(centreX + sx * TILE_PX, centreY + sy * TILE_PX);
-  if (anim.def.additive) s.blendMode = 'add';
-  return s;
-}
-
 /**
  * Owns all placed entities: tile occupancy, display objects split into a
  * shadow layer and a y-sorted object layer, and synchronized animation.
@@ -97,6 +86,7 @@ export class EntityManager {
   private nextId = 1;
 
   constructor(private assets: AssetStore) {
+    // Shadows are drawn as one flat layer under all objects, like Factorio.
     this.shadowLayer.label = 'shadows';
     this.shadowLayer.alpha = 0.6;
     this.objectLayer.label = 'entities';
@@ -137,8 +127,8 @@ export class EntityManager {
   }
 
   remove(e: Entity): void {
-    for (const l of e.layers) l.sprite.destroy();
-    e.layers = [];
+    e.stack?.destroy();
+    e.stack = null;
     for (let ty = e.y; ty < e.y + e.height; ty++) {
       for (let tx = e.x; tx < e.x + e.width; tx++) this.occupancy.delete(cell(tx, ty));
     }
@@ -150,23 +140,11 @@ export class EntityManager {
   private refresh(e: Entity): void {
     const keys = e.proto.connectedLayers?.(e, this) ?? layerKeys(e.proto, e.direction);
     if (keys.length === e.layerKeys.length && keys.every((k, i) => k === e.layerKeys[i])) return;
-    for (const l of e.layers) l.sprite.destroy();
-    e.layers = [];
+    e.stack?.destroy();
     e.layerKeys = keys;
-    const cx = (e.x + e.width / 2) * TILE_PX;
-    const cy = (e.y + e.height / 2) * TILE_PX;
-    for (const k of keys) {
-      const anim = this.assets.animation(k);
-      const sprite = makeLayerSprite(anim, cx, cy);
-      if (anim.def.drawAsShadow) {
-        this.shadowLayer.addChild(sprite);
-      } else {
-        // Sort by the entity's bottom edge so taller things overlap correctly.
-        sprite.zIndex = (e.y + e.height) * 1000 + e.layers.length;
-        this.objectLayer.addChild(sprite);
-      }
-      e.layers.push({ anim, sprite });
-    }
+    e.stack = new SpriteStack(this.assets, keys, e.proto.directionCount ?? 1, this.shadowLayer, this.objectLayer);
+    // Sort by the entity's bottom edge so taller things overlap correctly.
+    e.stack.setPosition((e.x + e.width / 2) * TILE_PX, (e.y + e.height / 2) * TILE_PX, e.y + e.height);
   }
 
   private refreshNeighbours(e: Entity): void {
@@ -190,12 +168,7 @@ export class EntityManager {
 
   /** Advance every animation to game tick `tick`. All belts stay in sync, like Factorio. */
   animate(tick: number): void {
-    for (const e of this.entities.values()) {
-      if (!e.working) continue;
-      for (const l of e.layers) {
-        if (l.anim.frames.length > 1) l.sprite.texture = l.anim.frames[frameAt(l.anim.def, tick)];
-      }
-    }
+    for (const e of this.entities.values()) e.stack?.update(e.working ? tick : 0, e.orientation);
   }
 }
 

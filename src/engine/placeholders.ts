@@ -215,6 +215,144 @@ function chest(): PlaceholderAnimation {
   return { canvas, def: { file: 'placeholder', width: PX, height: PX } };
 }
 
+function pumpjackBase(): PlaceholderAnimation {
+  const size = PX * 3;
+  const canvas = sheet(size, size, 1, 1, (ctx) => {
+    ctx.fillStyle = '#5a5648';
+    ctx.fillRect(6, 10, size - 12, size - 16);
+    ctx.strokeStyle = '#2e2b23';
+    ctx.lineWidth = 3;
+    ctx.strokeRect(7.5, 11.5, size - 15, size - 19);
+    ctx.fillStyle = '#2b2b2b';
+    ctx.beginPath();
+    ctx.arc(size * 0.3, size * 0.62, 7, 0, Math.PI * 2);
+    ctx.fill();
+  });
+  return { canvas, def: { file: 'placeholder', width: size, height: size } };
+}
+
+function pumpjackHorsehead(): PlaceholderAnimation {
+  const frames = 40;
+  const w = PX * 3;
+  const h = PX * 4;
+  const canvas = sheet(w, h, frames, 8, (ctx, f) => {
+    const pivot = [w * 0.55, h * 0.38];
+    const swing = Math.sin((f / frames) * Math.PI * 2) * 0.28;
+    // A-frame
+    ctx.strokeStyle = '#3d3a31';
+    ctx.lineWidth = 5;
+    ctx.beginPath();
+    ctx.moveTo(w * 0.4, h * 0.78);
+    ctx.lineTo(pivot[0], pivot[1]);
+    ctx.lineTo(w * 0.72, h * 0.78);
+    ctx.stroke();
+    // Walking beam with the horsehead on the left
+    ctx.save();
+    ctx.translate(pivot[0], pivot[1]);
+    ctx.rotate(swing);
+    ctx.fillStyle = '#c48a1e';
+    ctx.fillRect(-w * 0.45, -4, w * 0.75, 8);
+    ctx.fillStyle = '#a0701a';
+    ctx.beginPath();
+    ctx.moveTo(-w * 0.45, -12);
+    ctx.quadraticCurveTo(-w * 0.55, 0, -w * 0.45, 14);
+    ctx.lineTo(-w * 0.38, 14);
+    ctx.lineTo(-w * 0.38, -12);
+    ctx.fill();
+    ctx.restore();
+    // Polished rod
+    const rodX = pivot[0] - Math.cos(swing) * w * 0.47;
+    const rodY = pivot[1] - Math.sin(swing) * w * 0.47 + 14;
+    ctx.strokeStyle = '#9a9a9a';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(rodX, rodY);
+    ctx.lineTo(rodX, h * 0.8);
+    ctx.stroke();
+  });
+  return {
+    canvas,
+    def: { file: 'placeholder', width: w, height: h, frameCount: frames, lineLength: 8, shift: [0, -0.5], animationSpeed: 0.5 },
+  };
+}
+
+function turretBase(): PlaceholderAnimation {
+  const size = PX * 2;
+  const canvas = sheet(size, size, 1, 1, (ctx) => {
+    ctx.fillStyle = '#4a4d45';
+    ctx.beginPath();
+    ctx.moveTo(size * 0.3, 4);
+    ctx.lineTo(size * 0.7, 4);
+    ctx.lineTo(size - 4, size * 0.3);
+    ctx.lineTo(size - 4, size * 0.7);
+    ctx.lineTo(size * 0.7, size - 4);
+    ctx.lineTo(size * 0.3, size - 4);
+    ctx.lineTo(4, size * 0.7);
+    ctx.lineTo(4, size * 0.3);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = '#2a2c27';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+  });
+  return { canvas, def: { file: 'placeholder', width: size, height: size } };
+}
+
+function turretGun(direction: number, count: number): PlaceholderAnimation {
+  const size = PX * 2;
+  const canvas = sheet(size, size, 2, 2, (ctx, f) => {
+    ctx.translate(size / 2, size / 2);
+    ctx.rotate((direction / count) * Math.PI * 2);
+    ctx.fillStyle = '#c48a1e';
+    ctx.beginPath();
+    ctx.arc(0, 0, 13, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#2f2f2f';
+    ctx.fillRect(-6, -30, 4, 22);
+    ctx.fillRect(2, -30, 4, 22);
+    if (f === 1) {
+      ctx.fillStyle = 'rgba(255, 220, 120, 0.9)';
+      ctx.beginPath();
+      ctx.arc(0, -31, 5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  });
+  return { canvas, def: { file: 'placeholder', width: size, height: size, frameCount: 2, animationSpeed: 0.5, shift: [0, -0.25] } };
+}
+
+function biter(direction: number, count: number, size: number, body: string, legs: string): PlaceholderAnimation {
+  const frames = 8;
+  const canvas = sheet(size, size, frames, frames, (ctx, f) => {
+    ctx.translate(size / 2, size / 2);
+    ctx.rotate((direction / count) * Math.PI * 2);
+    const r = size * 0.18;
+    const step = Math.sin((f / frames) * Math.PI * 2) * r * 0.5;
+    ctx.strokeStyle = legs;
+    ctx.lineWidth = Math.max(1.5, size / 24);
+    for (const side of [-1, 1]) {
+      for (const k of [-1, 0, 1]) {
+        const phase = k === 0 ? -step : step;
+        ctx.beginPath();
+        ctx.moveTo(side * r * 0.6, k * r * 0.7);
+        ctx.lineTo(side * r * 1.9, k * r * 0.9 + phase * side);
+        ctx.stroke();
+      }
+    }
+    ctx.fillStyle = body;
+    ctx.beginPath();
+    ctx.ellipse(0, r * 0.4, r * 0.8, r * 1.2, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(0, -r * 1.1, r * 0.55, r * 0.6, 0, 0, Math.PI * 2);
+    ctx.fill();
+  });
+  return { canvas, def: { file: 'placeholder', width: size, height: size, frameCount: frames, animationSpeed: 0.4 } };
+}
+
+function directional(prefix: string, count: number, build: (d: number, n: number) => PlaceholderAnimation) {
+  return Object.fromEntries(Array.from({ length: count }, (_, d) => [`${prefix}/${d}`, () => build(d, count)]));
+}
+
 /** Builders for every animation key the game references. */
 const ANIMATIONS: Record<string, () => PlaceholderAnimation> = {
   'transport-belt/north': () => belt('north'),
@@ -233,6 +371,12 @@ const ANIMATIONS: Record<string, () => PlaceholderAnimation> = {
   radar,
   'radar/shadow': () => shadow(3, 3, 0.5),
   'wooden-chest': chest,
+  pumpjack: pumpjackBase,
+  'pumpjack/north': pumpjackHorsehead,
+  'gun-turret': turretBase,
+  ...directional('gun-turret/attacking_animation/dir', 64, turretGun),
+  ...directional('small-biter/dir', 16, (d, n) => biter(d, n, PX * 1.5, '#9a8a5a', '#5d5236')),
+  ...directional('medium-biter/dir', 16, (d, n) => biter(d, n, PX * 2.2, '#b05a4a', '#6a3328')),
 };
 
 function hash(x: number, y: number): number {

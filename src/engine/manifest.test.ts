@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { frameAt, frameRects } from './manifest';
+import { frameAt, frameRects, parseTint } from './manifest';
 
 describe('frameRects', () => {
   it('wraps frames at lineLength and applies x/y offsets', () => {
@@ -30,5 +30,14 @@ describe('frameAt', () => {
   it('ping-pongs for forward-then-backward', () => {
     const def = { file: 'a', width: 1, height: 1, frameCount: 3, runMode: 'forward-then-backward' as const };
     expect([0, 1, 2, 3, 4, 5].map((t) => frameAt(def, t))).toEqual([0, 1, 2, 1, 0, 1]);
+  });
+});
+
+describe('parseTint', () => {
+  it('reads 0-1 objects and 0-255 arrays like Factorio', () => {
+    expect(parseTint({ r: 1, g: 0.5, b: 0, a: 1 })).toEqual({ color: 0xff8000, alpha: 1 });
+    expect(parseTint([255, 0, 128, 128])).toEqual({ color: 0xff0080, alpha: 128 / 255 });
+    expect(parseTint({ r: 0.2, g: 0.2, b: 0.2 })).toEqual({ color: 0x333333, alpha: 1 });
+    expect(parseTint(undefined)).toBeNull();
   });
 });

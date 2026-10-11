@@ -37,6 +37,12 @@ export interface AnimationDef {
   additive?: boolean;
   /** Ping-pong instead of looping (Factorio `run_mode = "forward-then-backward"`). */
   runMode?: 'forward' | 'backward' | 'forward-then-backward';
+  /**
+   * Colour multiplied into the sprite (Factorio `tint`), as {r, g, b, a} or
+   * [r, g, b, a], in 0-1 or 0-255 like Factorio accepts. Used by the
+   * greyscale mask layers of biters and turrets.
+   */
+  tint?: { r: number; g: number; b: number; a?: number } | number[];
 }
 
 export interface TileDef {
@@ -107,4 +113,18 @@ export function frameAt(def: AnimationDef, tick: number): number {
     default:
       return step % count;
   }
+}
+
+/** Normalizes a Factorio tint to a 0xRRGGBB colour and an alpha in 0-1. */
+export function parseTint(tint: AnimationDef['tint']): { color: number; alpha: number } | null {
+  if (!tint) return null;
+  let [r, g, b, a] = Array.isArray(tint) ? tint : [tint.r, tint.g, tint.b, tint.a];
+  r ??= 0;
+  g ??= 0;
+  b ??= 0;
+  a ??= Math.max(r, g, b) > 1 ? 255 : 1;
+  // Factorio treats a colour as 0-255 when any component is above 1.
+  const k = Math.max(r, g, b, a) > 1 ? 255 : 1;
+  const c = (v: number) => Math.round(Math.min(1, Math.max(0, v / k)) * 255);
+  return { color: (c(r) << 16) | (c(g) << 8) | c(b), alpha: Math.min(1, Math.max(0, a / k)) };
 }

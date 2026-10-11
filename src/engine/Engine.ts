@@ -3,6 +3,7 @@ import { AssetStore } from './Assets';
 import { Camera } from './Camera';
 import { EntityManager } from './Entities';
 import { TileMap, type TileGenerator } from './TileMap';
+import { UnitManager } from './Units';
 
 export const TICKS_PER_SECOND = 60;
 
@@ -27,6 +28,7 @@ export class Engine {
   readonly overlay = new Container();
   tiles!: TileMap;
   entities!: EntityManager;
+  units!: UnitManager;
   tick = 0;
   private accumulator = 0;
   private tickListeners: ((tick: number) => void)[] = [];
@@ -47,6 +49,7 @@ export class Engine {
 
     this.tiles = new TileMap(this.assets, opts.tileNames, opts.generateTile);
     this.entities = new EntityManager(this.assets);
+    this.units = new UnitManager(this.assets, this.entities.shadowLayer, this.entities.objectLayer);
     this.world.addChild(this.tiles.container, this.entities.shadowLayer, this.entities.objectLayer, this.overlay);
     this.app.stage.addChild(this.world);
 
@@ -68,11 +71,13 @@ export class Engine {
       this.accumulator -= step;
       this.tick++;
       for (const fn of this.tickListeners) fn(this.tick);
+      this.units.step();
     }
     for (const fn of this.frameListeners) fn(dtMs);
     this.camera.resize(this.app.screen.width, this.app.screen.height);
     this.camera.apply(this.world);
     this.tiles.update(this.camera);
     this.entities.animate(this.tick);
+    this.units.animate(this.tick);
   }
 }

@@ -12,7 +12,7 @@ npm test
 npm run build
 ```
 
-Controls: WASD or drag to pan, mouse wheel to zoom, 1-4 to pick an entity,
+Controls: WASD or drag to pan, mouse wheel to zoom, 1-6 to pick an entity,
 R to rotate, left click to place, right click to remove, Q to clear the cursor.
 
 ## Engine
