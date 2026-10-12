@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { CDF_ASSET_PREFIX, cdfAssetSource } from './cdfAssets';
 
-const cdf = { baseUrl: 'https://api.cognitedata.com/', project: 'lervik-industries', getToken: async () => 'tok' };
+const cdf = { baseUrl: 'https://api.cognitedata.com/', project: 'lervik-industries', getToken: async () => 'tok', space: null };
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -33,6 +33,20 @@ describe('cdfAssetSource', () => {
     }));
     vi.spyOn(console, 'warn').mockImplementation(() => {});
     expect(await cdfAssetSource(cdf).urls(['a.png', 'gone.png'])).toEqual([`u:${CDF_ASSET_PREFIX}a.png`, '']);
+  });
+
+  it('asks for instance ids in the sprite space by default', async () => {
+    const fetch = vi.fn(async (_url: string, init: RequestInit) => {
+      const items = JSON.parse(init.body as string).items as { instanceId: { space: string; externalId: string } }[];
+      if (items.some((i) => i.instanceId.externalId.endsWith('gone.png'))) {
+        return respond(400, { error: { code: 400, message: 'missing', missing: [{ instanceId: { space: 'factorio-defence', externalId: CDF_ASSET_PREFIX + 'gone.png' } }] } });
+      }
+      return respond(200, { items: items.map((i) => ({ instanceId: i.instanceId, downloadUrl: `u:${i.instanceId.space}:${i.instanceId.externalId}` })) });
+    });
+    vi.stubGlobal('fetch', fetch);
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const urls = await cdfAssetSource({ ...cdf, space: undefined }).urls(['a.png', 'gone.png']);
+    expect(urls).toEqual([`u:factorio-defence:${CDF_ASSET_PREFIX}a.png`, '']);
   });
 
   it('throws on other errors so the engine falls back to placeholders', async () => {

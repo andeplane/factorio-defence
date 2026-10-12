@@ -1,6 +1,6 @@
 import { connectToHostApp } from '@cognite/app-sdk';
 import { setAssetSource } from '../engine/Assets';
-import { cdfAssetSource } from './cdfAssets';
+import { CDF_SPRITE_SPACE, cdfAssetSource } from './cdfAssets';
 
 /**
  * Flows build only: connects to the Fusion host and points the engine at the
@@ -15,8 +15,11 @@ export async function connectFlows(): Promise<void> {
       new Promise<never>((_, reject) => setTimeout(() => reject(new Error('Fusion handshake timed out')), 10_000)),
     ]);
     const [baseUrl, project] = await Promise.all([api.getBaseUrl(), api.getProject()]);
-    setAssetSource(cdfAssetSource({ baseUrl, project, getToken: () => api.getAccessToken() }));
-    console.info(`[flows] loading sprites from CDF project ${project}`);
+    // .env.flows can name another space, or set it empty to read classic files.
+    const envSpace = import.meta.env.VITE_CDF_SPRITE_SPACE;
+    const space = envSpace === undefined ? CDF_SPRITE_SPACE : envSpace || null;
+    setAssetSource(cdfAssetSource({ baseUrl, project, space, getToken: () => api.getAccessToken() }));
+    console.info(`[flows] loading sprites from CDF project ${project}, ${space ? `space ${space}` : 'classic files'}`);
   } catch (err) {
     console.warn('[flows] not running inside Fusion, using bundled assets', err);
   }
