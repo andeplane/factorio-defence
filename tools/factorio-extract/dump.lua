@@ -18,6 +18,7 @@ local SELECT = {
   ["corpse"]="*", ["fire"]={"fire-flame"}, ["sticker"]={"acid-sticker-small","fire-sticker"},
   ["item"]="*", ["ammo"]="*", ["gun"]="*", ["capsule"]="*", ["module"]="*", ["tool"]="*", ["fluid"]="*", ["recipe"]="*",
   ["item-group"]="*", ["item-subgroup"]=nil,
+  ["character"]={"character"},
 }
 -- corpses are many; keep only those referenced by selected entities
 local KEEP_TOP = {type=1,name=1,collision_box=1,selection_box=1,drawing_box=1,tile_width=1,tile_height=1,icon_size=1,icon_mipmaps=1,
@@ -86,6 +87,13 @@ for t,sel in pairs(SELECT) do
       local ok = sel=="*"
       if type(sel)=="table" then for _,n in ipairs(sel) do if n==name then ok=true end end end
       if t=="tile" and name:match("^lab%-") then ok=false end
+      if ok and t=="character" then
+        -- Only the plain (armour level 1) animations, the ones crews use.
+        local a = p.animations[1]
+        p = {type=p.type, name=p.name, icon=p.icon, icon_size=p.icon_size, icon_mipmaps=p.icon_mipmaps,
+             animations={idle=a.idle, running=a.running, running_with_gun=a.running_with_gun,
+                         mining_with_tool=a.mining_with_tool, idle_with_gun=a.idle_with_gun}}
+      end
       if ok then wanted[t]=wanted[t] or {}; wanted[t][name]=pick(p) end
     end
   end

@@ -19,8 +19,41 @@ FIELDS = ["width", "height", "x", "y", "frame_count", "line_length", "scale", "s
 def is_sprite(n):
     return isinstance(n, dict) and ("filename" in n or "filenames" in n or "stripes" in n)
 
+STITCHED = {}
+
+def stitch(n):
+    """Joins stripes that split the FRAMES across files (each stripe holds every
+    direction) into one sheet: one row per direction, frames left to right.
+    Returns the derived file, or None when the stripes split directions instead."""
+    st, dc = n["stripes"], n.get("direction_count", 1)
+    fc = n.get("frame_count", 1)
+    if len(st) < 2 or any(s.get("height_in_frames") != dc for s in st) or sum(s.get("width_in_frames", 0) for s in st) != fc:
+        return None
+    key = tuple(s["filename"] for s in st)
+    if key not in STITCHED:
+        from PIL import Image
+        w, h = n["width"], n["height"]
+        sheet = Image.new("RGBA", (fc * w, dc * h))
+        x = 0
+        for s in st:
+            with Image.open(os.path.join(data_dir, s["filename"])) as img:
+                part = img.crop((s.get("x", 0), s.get("y", 0), s.get("x", 0) + s["width_in_frames"] * w, s.get("y", 0) + dc * h))
+                sheet.paste(part, (x, 0))
+            x += s["width_in_frames"] * w
+        rel = "stitched/" + os.path.basename(st[0]["filename"]).replace("-1.png", ".png")
+        os.makedirs(os.path.join(os.path.dirname(os.path.abspath(out_path)), "stitched"), exist_ok=True)
+        sheet.save(os.path.join(os.path.dirname(os.path.abspath(out_path)), rel))
+        STITCHED[key] = rel
+    return STITCHED[key]
+
 def entry(n):
     e = {}
+    if "stripes" in n:
+        merged = stitch(n)
+        if merged:
+            n = {k: v for k, v in n.items() if k != "stripes"}
+            n["filename"] = merged
+            n.setdefault("line_length", n.get("frame_count", 1))
     if "filename" in n: e["file"] = n["filename"]
     if "filenames" in n: e["files"] = n["filenames"]
     if "stripes" in n:
@@ -117,7 +150,12 @@ BELT_ROWS = ["east", "west", "north", "south", "east_to_north", "north_to_east",
              "south_to_east", "east_to_south", "south_to_west", "west_to_south", "starting_south", "ending_south",
              "starting_west", "ending_west", "starting_north", "ending_north", "starting_east", "ending_east"]
 
+for name, p in sorted(P.get("character", {}).items()):
+    for anim, node in sorted(p.get("animations", {}).items()):
+        flatten(node, f"{name}/{anim}")
+
 for t in ENTITY_TYPES:
+    if t == "character": continue
     for name, p in sorted(P[t].items()):
         key = name if t != "corpse" else f"corpse/{name}"
         bas = p.get("belt_animation_set")
