@@ -35,6 +35,10 @@ export class Engine {
   entities!: EntityManager;
   units!: UnitManager;
   tick = 0;
+  /** Animation ticks per game tick: a game running its simulation faster sets this so animations keep pace. 0 freezes them. */
+  timeScale = 1;
+  /** Drives entity and unit animations; advances by `timeScale` each game tick. */
+  animationTick = 0;
   private accumulator = 0;
   private tickListeners: ((tick: number) => void)[] = [];
   private frameListeners: ((dtMs: number) => void)[] = [];
@@ -85,13 +89,14 @@ export class Engine {
       this.accumulator -= step;
       this.tick++;
       for (const fn of this.tickListeners) fn(this.tick);
+      this.animationTick += this.timeScale;
       this.units.step();
     }
     for (const fn of this.frameListeners) fn(dtMs);
     this.camera.resize(this.app.screen.width, this.app.screen.height);
     this.camera.apply(this.world);
     this.tiles.update(this.camera);
-    this.entities.animate(this.tick);
-    this.units.animate(this.tick);
+    this.entities.animate(this.animationTick);
+    this.units.animate(this.animationTick);
   }
 }

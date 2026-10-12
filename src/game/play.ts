@@ -526,10 +526,12 @@ export async function startGame(parent: HTMLElement): Promise<void> {
   // ---- Loop ------------------------------------------------------------------
 
   engine.onTick(() => {
+    // Animations follow the simulation: frozen while it is stopped, faster when it is sped up.
+    engine.timeScale = 0;
     if (!scene || paused || modal.isConnected) return;
     const g = scene.game;
     if (g.phase !== 'shift') return;
-    for (let i = 0; i < speed && g.phase === 'shift'; i++) g.step();
+    for (let i = 0; i < speed && g.phase === 'shift'; i++, engine.timeScale++) g.step();
     if (g.reports.length > shownReports) {
       shownReports = g.reports.length;
       afterShift();
@@ -553,4 +555,5 @@ export async function startGame(parent: HTMLElement): Promise<void> {
 
   showLevelSelect();
   (window as unknown as { game: () => Game | undefined }).game = () => scene?.game;
+  (window as unknown as { engine: Engine }).engine = engine;
 }
