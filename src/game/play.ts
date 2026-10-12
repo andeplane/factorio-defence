@@ -445,19 +445,14 @@ export async function startGame(parent: HTMLElement): Promise<void> {
     startDemo();
     ui.replaceChildren();
     const panel = el('div', 'panel mainmenu');
-    const played = Object.keys(loadStars()).length > 0;
-    const next = nextLevel();
-    const play = el('button', 'primary', played ? `Continue: ${LEVELS.indexOf(next) + 1}. ${next.name}` : 'New game');
-    play.addEventListener('click', () => startLevel(next));
-    const levels = el('button', '', 'Levels');
-    levels.addEventListener('click', showLevelSelect);
+    const play = el('button', 'primary', 'Play');
+    play.addEventListener('click', showLevelSelect);
     const how = el('button', '', 'How to play');
     how.addEventListener('click', showHowToPlay);
     panel.append(
       el('h1', '', 'Factorio Defence'),
       el('p', 'sub', 'Keep the factory running. Problems will come. Cognite helps you see them first.'),
       play,
-      levels,
       how,
       el('small', 'credit', 'A fan-made Cognite demo. Factorio graphics © Wube Software, not affiliated.'),
     );
@@ -483,12 +478,13 @@ export async function startGame(parent: HTMLElement): Promise<void> {
     startDemo();
     ui.replaceChildren();
     const stars = loadStars();
+    const next = nextLevel();
     const panel = el('div', 'panel menu');
     panel.append(el('h1', '', 'Factorio Defence'), el('p', 'sub', 'Keep the factory running. Problems will come. Cognite helps you see them first.'));
     const grid = el('div', 'levels');
     LEVELS.forEach((level, i) => {
       const unlocked = i === 0 || (stars[LEVELS[i - 1].id] ?? 0) > 0 || location.search.includes('unlock');
-      const b = el('button', 'level' + (unlocked ? '' : ' locked'));
+      const b = el('button', 'level' + (unlocked ? '' : ' locked') + (level === next ? ' next' : ''));
       const s = stars[level.id] ?? 0;
       b.append(el('b', '', `${i + 1}. ${level.name}`), el('span', 'stars', '★'.repeat(s) + '☆'.repeat(3 - s)), el('small', '', level.text), el('small', 'new', `New: ${level.introduces}`));
       b.disabled = !unlocked;
