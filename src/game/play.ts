@@ -1,4 +1,4 @@
-import { Container, Graphics, Text } from 'pixi.js';
+import { Container, Graphics, Sprite, Text } from 'pixi.js';
 import { TILE_PX } from '../engine/Camera';
 import { Engine } from '../engine/Engine';
 import { prototypeKeys, type Direction, type Entity, type EntityPrototype } from '../engine/Entities';
@@ -93,6 +93,9 @@ const CARD_COLOR: Partial<Record<CardId, number>> = {
   inrobot: 0xffb300,
 };
 
+/** Colour multiplier for unconnected equipment. */
+const OFFLINE_TINT = 0x9aa3b4;
+
 const CARD_BADGE: Partial<Record<CardId, string>> = { extractor: 'EX', charts: 'CH', inrobot: 'IR' };
 
 const el = <K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, text?: string): HTMLElementTagNameMap[K] => {
@@ -131,7 +134,12 @@ class LevelScene {
   private readonly marks = new Graphics();
   private readonly labels = new Container();
   private readonly ghost = new Graphics();
+  /** InRobot's inspection robots, by placed card uid. */
+  private readonly robots = new Map<number, Sprite>();
+  private readonly robotLayer = new Container();
   private fogStamp = '';
+  /** Entities not connected to Data Fusion, drawn greyed out. */
+  private readonly offline = new Set<Entity>();
   /** Crew members drawn as the Factorio character, by name. */
   private readonly crewSprites = new Map<string, { state: CrewAnim; stack: SpriteStack; x: number; y: number; orientation: number }>();
 
@@ -144,7 +152,7 @@ class LevelScene {
     this.view = new FactoryView(engine.assets, engine.entities, engine.itemLayer, engine.highLayer, (belt) =>
       beltCurveFrom(belt, engine.entities),
     );
-    engine.overlay.addChild(this.fog, this.marks, this.labels, this.ghost);
+    engine.overlay.addChild(this.fog, this.marks, this.robotLayer, this.labels, this.ghost);
     this.sync();
   }
 
@@ -153,7 +161,8 @@ class LevelScene {
     this.mirrored.clear();
     for (const c of this.crewSprites.values()) c.stack.destroy();
     this.crewSprites.clear();
-    for (const g of [this.fog, this.marks, this.labels, this.ghost]) g.destroy({ children: true });
+    for (const g of [this.fog, this.marks, this.robotLayer, this.labels, this.ghost]) g.destroy({ children: true });
+    this.robots.clear();
     this.view.render({ beltItems: [], inserters: [], machines: [] });
   }
 
@@ -202,8 +211,12 @@ class LevelScene {
         g.circle(c.cx * TILE_PX, c.cy * TILE_PX, c.radius * TILE_PX).stroke({ color: 0x4fc3f7, alpha: 0.25, width: 2 });
         continue;
       }
-      g.roundRect(c.x * TILE_PX + 3, c.y * TILE_PX + 3, c.size * TILE_PX - 6, c.size * TILE_PX - 6, 6).fill({ color, alpha: 0.9 });
       g.circle(c.cx * TILE_PX, c.cy * TILE_PX, c.radius * TILE_PX).stroke({ color, alpha: 0.25, width: 2 });
+      if (c.card === 'inrobot') {
+        this.drawRobot(c, time);
+        continue;
+      }
+      g.roundRect(c.x * TILE_PX + 3, c.y * TILE_PX + 3, c.size * TILE_PX - 6, c.size * TILE_PX - 6, 6).fill({ color, alpha: 0.9 });
       this.label(CARD_BADGE[c.card] ?? '', c.cx, c.cy, 0x101010, 12);
     }
     // Problems the plant knows about: a pulsing alert. Hidden ones show only through their effects.
@@ -236,6 +249,50 @@ class LevelScene {
       placedLabels.push({ x: pos.x, y: ly });
       this.label(`${c.name} · ${doing}`, pos.x, ly, 0xfff3e0, 12, true);
     }
+  }
+
+  /**
+   * InRobot: a charging pad, and a robot that patrols its range, hovering with its shadow below it,
+   * the way a Factorio construction robot flies.
+   */
+  private drawRobot(c: { uid: number; x: number; y: number; cx: number; cy: number; size: number; radius: number }, time: number): void {
+    const g = this.marks;
+    const px = c.x * TILE_PX;
+    const py = c.y * TILE_PX;
+    const side = c.size * TILE_PX;
+    // A landing pad: a dark plate with a hazard-striped landing ring and a status light.
+    const mx = c.cx * TILE_PX;
+    const my = c.cy * TILE_PX;
+    g.roundRect(px + 3, py + 3, side - 6, side - 6, 6).fill({ color: 0x34373c }).stroke({ color: 0x1b1b1b, width: 2 });
+    for (let i = 0; i < 8; i++) {
+      const a0 = (i / 8) * Math.PI * 2;
+      const r = side * 0.3;
+      g.moveTo(mx + Math.cos(a0) * r, my + Math.sin(a0) * r)
+        .arc(mx, my, r, a0, a0 + Math.PI / 8)
+        .stroke({ color: 0xffb300, width: 4 });
+    }
+    g.circle(mx, my, 5).fill({ color: 0x66bb6a, alpha: 0.5 + 0.5 * Math.sin(time / 300) });
+    g.circle(mx, my, c.radius * TILE_PX).fill({ color: 0xffb300, alpha: 0.04 });
+    const tex = this.engine.assets.animation('icon/construction-robot')?.frames[0];
+    let robot = this.robots.get(c.uid);
+    if (!robot) {
+      robot = new Sprite(tex);
+      robot.visible = tex !== undefined;
+      robot.anchor.set(0.5);
+      robot.width = robot.height = TILE_PX * 1.6;
+      this.robotLayer.addChild(robot);
+      this.robots.set(c.uid, robot);
+    }
+    // A slow loop around the pad, out to half the range, with a gentle bob.
+    const a = time / 4000 + c.uid;
+    const r = Math.min(4, c.radius * 0.5) * (0.75 + 0.25 * Math.sin(time / 2300 + c.uid));
+    const gx = (c.cx + Math.cos(a) * r) * TILE_PX;
+    const gy = (c.cy + Math.sin(a) * r * 0.8) * TILE_PX;
+    g.ellipse(gx, gy, 16, 7).fill({ color: 0x000000, alpha: 0.45 });
+    const hover = 34 + Math.sin(time / 350) * 4;
+    robot.position.set(gx, gy - hover);
+    // Without the Factorio sprites, a simple drone shape.
+    if (!tex) g.ellipse(gx, gy - hover, 15, 10).fill({ color: 0xcfd8dc }).stroke({ color: 0x1b1b1b, width: 2 }).circle(gx, gy - hover, 4).fill({ color: 0xffb300 });
   }
 
   /** Moves a crew member's character sprite, switching between idle, running and repairing. */
@@ -271,18 +328,19 @@ class LevelScene {
     this.labels.addChild(t);
   }
 
-  /** Grey fog over everything not connected to Cognite Data Fusion: the data silos. */
+  /**
+   * Equipment Data Fusion does not connect is drawn in a cold, washed-out grey: its data stays in a
+   * silo. It regains its colours once a hub or extractor connects it.
+   */
   private drawFog(): void {
     const stamp = this.game.placed.map((p) => p.uid).join(',') + ':' + this.game.stage;
-    if (stamp === this.fogStamp) return;
-    this.fogStamp = stamp;
-    const b = this.game.world.bounds();
-    const f = this.fog;
-    f.clear();
-    for (let y = b.minY - 2; y < b.maxY + 2; y++)
-      for (let x = b.minX - 2; x < b.maxX + 2; x++)
-        if (!this.game.connected(x + 0.5, y + 0.5)) f.rect(x * TILE_PX, y * TILE_PX, TILE_PX, TILE_PX);
-    f.fill({ color: 0x8a8f96, alpha: 0.28 });
+    if (stamp !== this.fogStamp) {
+      this.fogStamp = stamp;
+      this.offline.clear();
+      for (const e of this.mirrored.values())
+        if (e && !this.game.connected(e.x + e.width / 2, e.y + e.height / 2)) this.offline.add(e);
+    }
+    for (const e of this.mirrored.values()) e?.stack?.setTint(e && this.offline.has(e) ? OFFLINE_TINT : null);
   }
 
   /** Draws where a placed card would go and its range; returns whether it may go there. */
@@ -319,6 +377,7 @@ export async function startGame(parent: HTMLElement): Promise<void> {
       ...PROTOTYPES.flatMap(prototypeKeys),
       ...factoryViewKeys(ITEM_NAMES),
       ...CREW_ANIMS.flatMap((a) => crewLayers(a).flatMap((k) => expandKey(k, 8))),
+      'icon/construction-robot',
     ],
   });
 
@@ -396,19 +455,14 @@ export async function startGame(parent: HTMLElement): Promise<void> {
     startDemo();
     ui.replaceChildren();
     const panel = el('div', 'panel mainmenu');
-    const played = Object.keys(loadStars()).length > 0;
-    const next = nextLevel();
-    const play = el('button', 'primary', played ? `Continue: ${LEVELS.indexOf(next) + 1}. ${next.name}` : 'New game');
-    play.addEventListener('click', () => startLevel(next));
-    const levels = el('button', '', 'Levels');
-    levels.addEventListener('click', showLevelSelect);
+    const play = el('button', 'primary', 'Play');
+    play.addEventListener('click', showLevelSelect);
     const how = el('button', '', 'How to play');
     how.addEventListener('click', showHowToPlay);
     panel.append(
       el('h1', '', 'Factorio Defence'),
       el('p', 'sub', 'Keep the factory running. Problems will come. Cognite helps you see them first.'),
       play,
-      levels,
       how,
       el('small', 'credit', 'A fan-made Cognite demo. Factorio graphics © Wube Software, not affiliated.'),
     );
@@ -434,12 +488,13 @@ export async function startGame(parent: HTMLElement): Promise<void> {
     startDemo();
     ui.replaceChildren();
     const stars = loadStars();
+    const next = nextLevel();
     const panel = el('div', 'panel menu');
     panel.append(el('h1', '', 'Factorio Defence'), el('p', 'sub', 'Keep the factory running. Problems will come. Cognite helps you see them first.'));
     const grid = el('div', 'levels');
     LEVELS.forEach((level, i) => {
       const unlocked = i === 0 || (stars[LEVELS[i - 1].id] ?? 0) > 0 || location.search.includes('unlock');
-      const b = el('button', 'level' + (unlocked ? '' : ' locked'));
+      const b = el('button', 'level' + (unlocked ? '' : ' locked') + (level === next ? ' next' : ''));
       const s = stars[level.id] ?? 0;
       b.append(el('b', '', `${i + 1}. ${level.name}`), el('span', 'stars', '★'.repeat(s) + '☆'.repeat(3 - s)), el('small', '', level.text), el('small', 'new', `New: ${level.introduces}`));
       b.disabled = !unlocked;
@@ -504,7 +559,7 @@ export async function startGame(parent: HTMLElement): Promise<void> {
       LEVELS.indexOf(level) === 0
         ? `<p>Each round is a shift. Deliver the order to the dock before the shift ends. Miss three orders and the level is lost.</p>` +
           `<p>Problems will hit your machines, belts and inserters. Crews only fix what someone has noticed. ` +
-          `Between shifts, buy Cognite cards to see problems sooner and fix them faster. The grey haze is equipment nobody has data on. Press G any time for the guide to every problem and its counters.</p>`
+          `Between shifts, buy Cognite cards to see problems sooner and fix them faster. Equipment drawn in cold grey is not connected: nobody has data on it yet. Press G any time for the guide to every problem and its counters.</p>`
         : '';
     showModal(`${level.name}`, `<p>${level.text}</p><p><b>New:</b> ${level.introduces}</p>${howTo}<p><b>${stage.title}.</b> ${stage.text}</p>`, 'Start');
     renderShop();
@@ -566,7 +621,7 @@ export async function startGame(parent: HTMLElement): Promise<void> {
       `<p>A problem gets fixed only after it is <b>spotted</b>. A work order then goes out after ${RULE.dispatchDelay} s (${card('flows')}: at once), ` +
       `and the nearest free crew member walks there and <b>fixes</b> it. Crews are the only ones who repair things. ` +
       `More crews (${card('crew')}) means more fixes at once; ${card('infield')} makes them walk faster and repair cheaper.</p>` +
-      `<p>Cognite products that read data (Charts, Asset Data Insights, Atlas AI, Maintain) only see equipment <b>connected</b> by a Data Fusion hub or an Extractor. The grey haze is unconnected equipment. InRobot inspects in person, so it also sees unconnected equipment, but it reports through Data Fusion. Charts and InRobot must be placed inside a hub's range.</p>` +
+      `<p>Cognite products that read data (Charts, Asset Data Insights, Atlas AI, Maintain) only see equipment <b>connected</b> by a Data Fusion hub or an Extractor. Unconnected equipment is drawn in cold grey and gets its colours back once connected. InRobot inspects in person, so it also sees unconnected equipment, but it reports through Data Fusion. Charts and InRobot must be placed inside a hub's range.</p>` +
       rows +
       `<div class="rule"><b>Events</b><br>` +
       `<b>Plant trip</b>: the power goes and the whole plant stops for ${RULE.tripSeconds} s. Bearings do not wear while it is down. ${card('simulators')} rehearses the restart, so trips last ${Math.round((1 - RULE.simulatorsTrip) * 100)}% less, and shows which problems the next shift brings and when.` +
