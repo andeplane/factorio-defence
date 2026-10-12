@@ -350,6 +350,79 @@ function biter(direction: number, count: number, size: number, body: string, leg
   return { canvas, def: { file: 'placeholder', width: size, height: size, frameCount: frames, animationSpeed: 0.4 } };
 }
 
+/** A worker in a hard hat and hi-vis vest, seen from above at an angle. */
+function character(state: 'idle' | 'running' | 'mining_with_tool', direction: number, count: number): PlaceholderAnimation {
+  const w = PX * 1.25;
+  const h = PX * 1.75;
+  const frames = state === 'idle' ? 1 : 8;
+  const angle = (direction / count) * Math.PI * 2;
+  const facingX = Math.sin(angle);
+  const facingUp = Math.cos(angle) > 0.3;
+  const canvas = sheet(w, h, frames, frames, (ctx, f) => {
+    const t = (f / frames) * Math.PI * 2;
+    const cx = w / 2;
+    const feet = h - 6;
+    const swing = state === 'running' ? Math.sin(t) * 5 : 0;
+    ctx.fillStyle = 'rgba(0,0,0,0.25)';
+    ctx.beginPath();
+    ctx.ellipse(cx, feet + 2, 10, 4, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // Legs
+    ctx.strokeStyle = '#2e3a4f';
+    ctx.lineWidth = 5;
+    ctx.lineCap = 'round';
+    for (const side of [-1, 1]) {
+      ctx.beginPath();
+      ctx.moveTo(cx + side * 4, feet - 16);
+      ctx.lineTo(cx + side * 4 + swing * side * (facingX ? 1 : 0.4), feet);
+      ctx.stroke();
+    }
+    // Body: hi-vis vest
+    ctx.fillStyle = '#ff9800';
+    ctx.beginPath();
+    ctx.roundRect(cx - 9, feet - 32, 18, 19, 5);
+    ctx.fill();
+    ctx.fillStyle = '#e0e0e0';
+    ctx.fillRect(cx - 9, feet - 24, 18, 3);
+    // Arms
+    ctx.strokeStyle = '#ff9800';
+    ctx.lineWidth = 4;
+    for (const side of [-1, 1]) {
+      const work = state === 'mining_with_tool' && side === (facingX >= 0 ? 1 : -1);
+      const lift = work ? -8 - Math.sin(t) * 7 : -swing * side;
+      ctx.beginPath();
+      ctx.moveTo(cx + side * 9, feet - 29);
+      ctx.lineTo(cx + side * 12 + (work ? facingX * 8 : 0), feet - 18 + lift);
+      ctx.stroke();
+      if (work) {
+        // Wrench
+        ctx.strokeStyle = '#9e9e9e';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(cx + side * 12 + facingX * 8, feet - 18 + lift);
+        ctx.lineTo(cx + side * 12 + facingX * 16, feet - 24 + lift);
+        ctx.stroke();
+        ctx.strokeStyle = '#ff9800';
+        ctx.lineWidth = 4;
+      }
+    }
+    // Head and hard hat
+    ctx.fillStyle = facingUp ? '#5d4037' : '#d7a77a';
+    ctx.beginPath();
+    ctx.arc(cx + facingX * 2, feet - 38, 7, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#ffeb3b';
+    ctx.beginPath();
+    ctx.arc(cx + facingX * 2, feet - 40, 8, Math.PI, 0);
+    ctx.fill();
+    ctx.fillRect(cx + facingX * 2 - 10, feet - 41, 20, 3);
+  });
+  return {
+    canvas,
+    def: { file: 'placeholder', width: w, height: h, frameCount: frames, animationSpeed: state === 'running' ? 0.3 : 0.2, shift: [0, -0.55] },
+  };
+}
+
 function directional(prefix: string, count: number, build: (d: number, n: number) => PlaceholderAnimation) {
   return Object.fromEntries(Array.from({ length: count }, (_, d) => [`${prefix}/${d}`, () => build(d, count)]));
 }
@@ -622,6 +695,9 @@ const ANIMATIONS: Record<string, () => PlaceholderAnimation> = {
   'pumpjack/north': pumpjackHorsehead,
   'gun-turret': turretBase,
   ...directional('gun-turret/attacking_animation/dir', 64, turretGun),
+  ...directional('character/idle/dir', 8, (d, n) => character('idle', d, n)),
+  ...directional('character/running/dir', 8, (d, n) => character('running', d, n)),
+  ...directional('character/mining_with_tool/dir', 8, (d, n) => character('mining_with_tool', d, n)),
   ...directional('small-biter/dir', 16, (d, n) => biter(d, n, PX * 1.5, '#9a8a5a', '#5d5236')),
   ...directional('medium-biter/dir', 16, (d, n) => biter(d, n, PX * 2.2, '#b05a4a', '#6a3328')),
 };

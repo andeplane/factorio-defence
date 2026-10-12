@@ -43,6 +43,8 @@ export interface AnimationDef {
    * greyscale mask layers of biters and turrets.
    */
   tint?: { r: number; g: number; b: number; a?: number } | number[];
+  /** Greyscale mask coloured at runtime (e.g. a character's player colour); see SpriteStack's `runtimeTint`. */
+  applyRuntimeTint?: boolean;
   /** Playback order as 1-based frame indices (Factorio `frame_sequence`), e.g. a drill head's dig loop. */
   frameSequence?: number[];
 }

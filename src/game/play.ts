@@ -3,6 +3,7 @@ import { TILE_PX } from '../engine/Camera';
 import { Engine } from '../engine/Engine';
 import { prototypeKeys, type Direction, type Entity, type EntityPrototype } from '../engine/Entities';
 import { FactoryView, factoryViewKeys } from '../engine/FactoryView';
+import { expandKey, orientationOf, SpriteStack } from '../engine/SpriteStack';
 import { valueNoise } from '../engine/TileMap';
 import { CARDS, type CardId } from '../sim/cards';
 import { DIR_VEC, TICKS_PER_SECOND, type Machine } from '../sim/factory';
@@ -89,6 +90,15 @@ const el = <K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, text?: 
 };
 
 /** Mirrors a Game's factory into the engine's entities and draws everything the sim knows on top. */
+type CrewAnim = 'idle' | 'running' | 'mining_with_tool';
+
+/** The Factorio character's layers for a crew animation: body, colour mask, shadow. */
+const crewLayers = (anim: CrewAnim) => [`character/${anim}/shadow/dir/{dir}`, `character/${anim}/dir/{dir}`, `character/${anim}/2/dir/{dir}`];
+const CREW_ANIMS: CrewAnim[] = ['idle', 'running', 'mining_with_tool'];
+
+/** One player colour per crew member, in hiring order. */
+const CREW_COLORS = [0xff9800, 0x42a5f5, 0x66bb6a, 0xab47bc, 0xef5350, 0xffee58];
+
 class LevelScene {
   readonly game: Game;
   private readonly view: FactoryView;
@@ -98,6 +108,8 @@ class LevelScene {
   private readonly labels = new Container();
   private readonly ghost = new Graphics();
   private fogStamp = '';
+  /** Crew members drawn as the Factorio character, by name. */
+  private readonly crewSprites = new Map<string, { state: CrewAnim; stack: SpriteStack; x: number; y: number; orientation: number }>();
 
   constructor(
     private readonly engine: Engine,
@@ -115,6 +127,8 @@ class LevelScene {
   destroy(): void {
     for (const e of this.mirrored.values()) if (e) this.engine.entities.remove(e);
     this.mirrored.clear();
+    for (const c of this.crewSprites.values()) c.stack.destroy();
+    this.crewSprites.clear();
     for (const g of [this.fog, this.marks, this.labels, this.ghost]) g.destroy({ children: true });
     this.view.render({ beltItems: [], inserters: [], machines: [] });
   }
@@ -184,14 +198,36 @@ class LevelScene {
         g.rect(x - 16, y + 6, 32 * p.severity, 5).fill({ color: 0xff7043 });
       }
     }
-    for (const c of snap.crews) {
-      const x = c.x * TILE_PX;
-      const y = c.y * TILE_PX;
-      if (c.state === 'work') g.circle(x, y, 10 + 4 * pulse).stroke({ color: 0xffa726, width: 2, alpha: 0.8 });
-      g.circle(x, y, 7).fill({ color: 0xffa726 }).stroke({ color: 0x1b1b1b, width: 2 });
+    for (const [i, c] of snap.crews.entries()) {
+      this.drawCrew(c, CREW_COLORS[i % CREW_COLORS.length]);
       const doing = c.state === 'idle' ? 'waiting for a work order' : `${c.state === 'walk' ? 'going to' : 'fixing'} ${PROBLEM_LABEL[c.job!].toLowerCase()}`;
-      this.label(`${c.name} · ${doing}`, c.x, c.y + 20 / TILE_PX, 0xfff3e0, 12, true);
+      this.label(`${c.name} · ${doing}`, c.x, c.y + 14 / TILE_PX, 0xfff3e0, 12, true);
     }
+  }
+
+  /** Moves a crew member's character sprite, switching between idle, running and repairing. */
+  private drawCrew(c: { name: string; x: number; y: number; state: 'idle' | 'walk' | 'work' }, color: number): void {
+    const anim: CrewAnim = c.state === 'walk' ? 'running' : c.state === 'work' ? 'mining_with_tool' : 'idle';
+    let s = this.crewSprites.get(c.name);
+    if (s && (Math.abs(c.x - s.x) > 1e-4 || Math.abs(c.y - s.y) > 1e-4)) s.orientation = orientationOf(c.x - s.x, c.y - s.y);
+    if (!s || s.state !== anim) {
+      s?.stack.destroy();
+      const stack = new SpriteStack(
+        this.engine.assets,
+        crewLayers(anim),
+        8,
+        this.engine.entities.shadowLayer,
+        this.engine.entities.objectLayer,
+        new Set(),
+        color,
+      );
+      s = { state: anim, stack, x: c.x, y: c.y, orientation: s?.orientation ?? 0.5 };
+      this.crewSprites.set(c.name, s);
+    }
+    s.x = c.x;
+    s.y = c.y;
+    s.stack.setPosition(c.x * TILE_PX, c.y * TILE_PX, c.y + 0.5);
+    s.stack.update(this.engine.animationTick, s.orientation);
   }
 
   private label(text: string, x: number, y: number, color: number, size: number, outline = false): void {
@@ -239,7 +275,11 @@ export async function startGame(parent: HTMLElement): Promise<void> {
     parent,
     tileNames: TILE_NAMES,
     generateTile,
-    animationKeys: [...PROTOTYPES.flatMap(prototypeKeys), ...factoryViewKeys(ITEM_NAMES)],
+    animationKeys: [
+      ...PROTOTYPES.flatMap(prototypeKeys),
+      ...factoryViewKeys(ITEM_NAMES),
+      ...CREW_ANIMS.flatMap((a) => crewLayers(a).flatMap((k) => expandKey(k, 8))),
+    ],
   });
 
   const ui = el('div', 'ui');

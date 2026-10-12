@@ -51,6 +51,8 @@ export class SpriteStack {
     shadowParent: Container | null,
     private objectParent: Container,
     workingKeys: ReadonlySet<string> = new Set(),
+    /** Colour for layers marked `applyRuntimeTint` (masks), like Factorio's player colour. */
+    private runtimeTint?: number,
   ) {
     for (const key of keys) {
       const anims = expandKey(key, directionCount).map((k) => assets.animation(k));
@@ -99,7 +101,7 @@ export class SpriteStack {
     s.position.set(this.cx + sx * TILE_PX, this.cy + sy * TILE_PX);
     s.blendMode = anim.def.additive ? 'add' : 'normal';
     const tint = parseTint(anim.def.tint);
-    s.tint = tint?.color ?? 0xffffff;
+    s.tint = anim.def.applyRuntimeTint && this.runtimeTint !== undefined ? this.runtimeTint : (tint?.color ?? 0xffffff);
     s.alpha = tint?.alpha ?? 1;
     if (s.parent === this.objectParent) s.zIndex = this.zBase * 1000 + this.layers.indexOf(l);
   }
