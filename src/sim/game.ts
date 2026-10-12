@@ -242,6 +242,11 @@ export class Game {
     return this.delivered.get(item)?.good ?? 0;
   }
 
+  /** Off-spec items of this type shipped this shift; they earn nothing. */
+  offSpecThisShift(item: ItemName): number {
+    return this.delivered.get(item)?.off ?? 0;
+  }
+
   /** What the player sees about the next shift. Without Simulators only the count is known. */
   forecast(): { count: number; threats: ThreatType[] | null; events: BossEvent[] } {
     return {

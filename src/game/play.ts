@@ -5,7 +5,7 @@ import { prototypeKeys, type Direction, type Entity, type EntityPrototype } from
 import { FactoryView, factoryViewKeys } from '../engine/FactoryView';
 import { valueNoise } from '../engine/TileMap';
 import { CARDS, type CardId } from '../sim/cards';
-import { DIR_VEC } from '../sim/factory';
+import { DIR_VEC, TICKS_PER_SECOND, type Machine } from '../sim/factory';
 import { Game, type ShiftReport } from '../sim/game';
 import { LEVELS } from '../sim/levels';
 import type { LevelDef } from '../sim/level';
@@ -51,6 +51,8 @@ const ITEM_LABEL: Record<string, string> = {
   inserter: 'Inserters',
   'transport-belt': 'Transport belts',
 };
+
+const itemLabel = (item: string) => ITEM_LABEL[item] ?? item.replace(/-/g, ' ').replace(/^./, (c) => c.toUpperCase());
 
 const PROBLEM_LABEL: Record<string, string> = {
   wear: 'Bearing wear',
@@ -232,6 +234,8 @@ export async function startGame(parent: HTMLElement): Promise<void> {
   let speed = 1;
   let paused = false;
   let placing: { index: number; card: CardId } | null = null;
+  /** What the info panel shows: the delivery chest or a machine, picked by clicking it. */
+  let inspected: { kind: 'chest' } | { kind: 'machine'; machine: Machine } | null = null;
   let mouse = { x: 0, y: 0 };
   let shownReports = 0;
 
@@ -272,6 +276,7 @@ export async function startGame(parent: HTMLElement): Promise<void> {
   const orders = el('div', 'panel orders');
   const shop = el('div', 'panel shop');
   const modal = el('div', 'panel modal');
+  const info = el('div', 'panel info');
 
   function startLevel(level: LevelDef): void {
     scene?.destroy();
@@ -279,6 +284,7 @@ export async function startGame(parent: HTMLElement): Promise<void> {
     shownReports = 0;
     placing = null;
     paused = false;
+    inspected = null;
     ui.replaceChildren(hud, orders, shop);
     const b = scene.game.world.bounds();
     camera.x = ((b.minX + b.maxX) / 2) * TILE_PX;
@@ -338,6 +344,70 @@ export async function startGame(parent: HTMLElement): Promise<void> {
     orders.innerHTML =
       `<b>Order per shift</b>${rows}` +
       `<div class="problems">Known problems: ${known}${alarms ? ` · alarms: ${alarms}` : ''}</div>`;
+    renderInfo();
+  }
+
+  /** The info panel for whatever the player clicked, refreshed with the HUD. */
+  function renderInfo(): void {
+    if (!scene || !inspected) {
+      info.remove();
+      return;
+    }
+    const g = scene.game;
+    const close = '<button class="close" title="Close (Esc)">×</button>';
+    if (inspected.kind === 'chest') {
+      const minutes = g.shiftTick / TICKS_PER_SECOND / 60;
+      const last = g.reports[g.reports.length - 1];
+      const rows = g.orders
+        .map((o) => {
+          if (g.phase !== 'shift') {
+            const r = last?.orders.find((x) => x.item === o.item);
+            return `<li>${itemLabel(o.item)}: ${r ? `${r.delivered}/${o.perShift} last shift` : `0/${o.perShift}`}</li>`;
+          }
+          const got = g.deliveredThisShift(o.item);
+          const off = g.offSpecThisShift(o.item);
+          const rate = minutes > 0.05 ? `, ${(got / minutes).toFixed(0)}/min` : '';
+          const need = ((o.perShift / g.shiftTicks) * TICKS_PER_SECOND * 60).toFixed(0);
+          return `<li>${itemLabel(o.item)}: <b>${got}</b>/${o.perShift}${rate} (need ${need}/min)${off ? `, <span class="warn">${off} off-spec</span>` : ''}</li>`;
+        })
+        .join('');
+      info.innerHTML = `${close}<b>Delivery chest</b><ul>${rows}</ul><small>Every good item here is paid for. Off-spec items earn nothing.</small>`;
+    } else {
+      const m = inspected.machine;
+      const name = m.isFurnace ? 'Stone furnace' : 'Assembling machine';
+      const product = itemLabel(m.recipe.result);
+      const inputs = [...m.input].map(([item, c]) => `${itemLabel(item)} ${c.good + c.off}`).join(', ');
+      const known = g.openProblems().filter((p) => p.machine === m && p.detected !== null);
+      const state = m.working ? 'Working' : g.phase === 'shift' ? '<span class="warn">Idle</span>' : 'Stopped between shifts';
+      const problems = known.length
+        ? known.map((p) => `<li class="warn">${PROBLEM_LABEL[p.type]}${p.type === 'wear' ? ` ${Math.round(p.severity * 100)}%` : ''}</li>`).join('')
+        : '<li>No known problems</li>';
+      info.innerHTML =
+        `${close}<b>${name}</b> making ${product}` +
+        `<ul><li>${state}${m.crafting ? `, ${Math.round(m.progress * 100)}% done` : ''}</li><li>Inputs: ${inputs || 'none'}</li>` +
+        `<li>Output waiting: ${m.output.good + m.output.off}</li>${problems}</ul>` +
+        (g.connected(m.x + m.size / 2, m.y + m.size / 2) ? '' : '<small>Not connected to Data Fusion: hidden problems stay hidden.</small>');
+    }
+    info.querySelector('.close')!.addEventListener('click', () => {
+      inspected = null;
+      renderInfo();
+    });
+    if (!info.isConnected) ui.appendChild(info);
+  }
+
+  /** The chest or machine under the cursor, if any. */
+  function pickAt(): typeof inspected {
+    if (!scene) return null;
+    const w = scene.game.world;
+    const { x, y } = hoverTile(1);
+    for (const line of w.lines) {
+      if (!line.sink || !w.active(line)) continue;
+      const last = line.tiles[line.length - 1];
+      const [dx, dy] = DIR_VEC[last.dir];
+      if (last.x + dx === x && last.y + dy === y) return { kind: 'chest' };
+    }
+    for (const m of w.machines) if (w.active(m) && x >= m.x && x < m.x + m.size && y >= m.y && y < m.y + m.size) return { kind: 'machine', machine: m };
+    return null;
   }
 
   function renderShop(): void {
@@ -501,6 +571,9 @@ export async function startGame(parent: HTMLElement): Promise<void> {
         scene.sync();
       }
       renderShop();
+    } else if (click && scene) {
+      inspected = pickAt();
+      renderInfo();
     }
   });
   canvas.addEventListener(
@@ -515,6 +588,9 @@ export async function startGame(parent: HTMLElement): Promise<void> {
     if (ev.key === 'Escape' && placing) {
       placing = null;
       renderShop();
+    } else if (ev.key === 'Escape' && inspected) {
+      inspected = null;
+      renderInfo();
     }
     if (ev.key === ' ' && scene?.game.phase === 'shift') {
       paused = !paused;
