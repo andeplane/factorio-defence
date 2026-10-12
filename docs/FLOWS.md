@@ -31,8 +31,9 @@ classic files with the same externalIds and directory, and `VITE_CDF_SPRITE_SPAC
 
 | Command | What it does |
 | --- | --- |
-| `npm run deploy:flows` | Uploads changed sprites, builds, deploys a new app version (`versionTag` is set from the time) |
+| `npm run deploy:flows` | Uploads changed sprites, builds, deploys a new draft app version (`versionTag` 0.&lt;day&gt;.&lt;minute&gt;, only for the deploy) |
 | `npm run deploy:flows -- --no-upload` | Same without the upload |
+| `npm run deploy:flows -- --activate` | Also publishes the new version and makes it the ACTIVE one |
 | `npm run upload:cdf` | Only the upload. `-- --dry-run` lists what it would send |
 | `npm run upload:cdf -- --delete-classic` | Lists classic sprite files left by an earlier classic upload; add `--yes` to delete them |
 | `npm run dev:flows` | Dev server on https://localhost:3001 that opens the app inside Fusion, reading sprites from CDF |
@@ -45,3 +46,19 @@ written to disk. Unchanged files are skipped by sha256 (a changed file's node is
 step runs `npx @cognite/cli apps deploy --interactive`, which has its own browser login. The project
 needs app hosting enabled; a project without Dev status also needs signed bundles (see the Flows
 docs on code signing).
+
+## After a deploy
+
+A deploy creates a **draft** version, which opens from the link the CLI prints
+(`.../flows-apps/app/factorio-defence?...&customAppVersion=<version>`). `deploy:flows -- --activate`
+makes it the version everyone gets in one go. By hand, the CLI acts on the `versionTag` in
+`app.json`, which `deploy:flows` puts back after deploying, so first set it to the deployed version,
+then from the repo root (each step logs in in the browser):
+
+1. `npx @cognite/cli@latest apps sign --interactive` signs the bundle in `.cognite-bundles/`
+   (needed where the project requires a developer signature)
+2. `npx @cognite/cli@latest apps publish .` moves the version from DRAFT to PUBLISHED
+3. `npx @cognite/cli@latest apps activate .` makes it the ACTIVE version (publishes first if needed)
+
+`npx @cognite/cli@latest apps status .` shows the current version and its signatures, and
+`apps submit` packages the source for Cognite's app certification (needed for production projects).
