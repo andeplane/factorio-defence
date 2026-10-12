@@ -4,6 +4,27 @@ import { placeholderAnimation, placeholderTile } from './placeholders';
 
 export const FACTORIO_ASSET_ROOT = 'assets/factorio/';
 
+/**
+ * Where the manifest and sprite sheets come from. `urls` maps paths relative
+ * to the asset root (e.g. "manifest.json", "entity/belt/hr-belt.png") to
+ * fetchable URLs, in order. The default serves them from the app itself; the
+ * Flows build swaps in one that reads CDF Files (see src/flows).
+ */
+export interface AssetSource {
+  urls(files: string[]): Promise<string[]>;
+}
+
+export function localAssetSource(root = FACTORIO_ASSET_ROOT): AssetSource {
+  return { urls: async (files) => files.map((f) => root + f) };
+}
+
+let defaultSource: AssetSource = localAssetSource();
+
+/** Sets the source `AssetStore.init()` uses when given none. Call before the engine starts. */
+export function setAssetSource(source: AssetSource): void {
+  defaultSource = source;
+}
+
 export interface Animation {
   key: string;
   def: AnimationDef;
@@ -33,13 +54,19 @@ export class AssetStore {
     return this.manifest !== null;
   }
 
-  private root = FACTORIO_ASSET_ROOT;
+  private source = defaultSource;
   private failed = new Set<string>();
 
   /** Reads the manifest only; images are fetched by `preload`. */
-  async init(root = FACTORIO_ASSET_ROOT): Promise<void> {
-    this.root = root;
-    this.manifest = await loadManifest(root + 'manifest.json');
+  async init(source: AssetSource | string = defaultSource): Promise<void> {
+    this.source = typeof source === 'string' ? localAssetSource(source) : source;
+    let url: string | undefined;
+    try {
+      [url] = await this.source.urls(['manifest.json']);
+    } catch (err) {
+      console.warn('[assets] could not locate manifest.json, using placeholders', err);
+    }
+    this.manifest = url ? await loadManifest(url) : null;
   }
 
   /**
@@ -67,10 +94,19 @@ export class AssetStore {
     const todo = [...files].filter((f) => !this.images.has(f) && !this.failed.has(f));
     let done = 0;
     onProgress?.(0, todo.length);
+    let urls: string[];
+    try {
+      urls = await this.source.urls(todo);
+    } catch (err) {
+      console.warn('[assets] could not locate sprite sheets, using placeholders', err);
+      urls = [];
+    }
     await Promise.all(
-      todo.map(async (file) => {
+      todo.map(async (file, i) => {
           try {
-            const tex = await PixiAssets.load<Texture>(this.root + file);
+            if (!urls[i]) throw new Error('no URL');
+            // Remote URLs may have no file extension, so name the parser.
+            const tex = await PixiAssets.load<Texture>({ src: urls[i], parser: 'texture' });
             tex.source.scaleMode = 'linear';
             this.images.set(file, tex);
           } catch (err) {
@@ -223,7 +259,8 @@ async function loadManifest(url: string): Promise<AssetManifest | null> {
   try {
     const res = await fetch(url, { cache: 'no-cache' });
     // Vite's dev server answers unknown paths with index.html, so check the type.
-    if (!res.ok || !(res.headers.get('content-type') ?? '').includes('json')) return null;
+    // Signed CDF download URLs may not say JSON, so only reject HTML.
+    if (!res.ok || (res.headers.get('content-type') ?? '').includes('html')) return null;
     const manifest = (await res.json()) as AssetManifest;
     if (!manifest || typeof manifest.animations !== 'object') {
       console.warn('[assets] manifest.json has no "animations" object, ignoring it');

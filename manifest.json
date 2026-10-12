@@ -1,0 +1,11 @@
+{
+  "manifestVersion": 1,
+  "permissions": {
+    "network": [
+      {
+        "sources": ["https://*.cognitedata.com", "https://storage.googleapis.com"],
+        "directives": ["connect-src", "img-src"]
+      }
+    ]
+  }
+}

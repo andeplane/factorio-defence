@@ -6,3 +6,9 @@ dist/
 # Graphics extracted from a local Factorio install. These are Wube Software's
 # copyright and must never be committed. See docs/ASSETS.md.
 public/assets/factorio/
+
+# Cognite Flows app: bundles kept by `cognite apps deploy`, local HTTPS certificates, secrets.
+.cognite-bundles/
+certificates/
+.env
+.env.local

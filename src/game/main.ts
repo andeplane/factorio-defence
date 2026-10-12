@@ -3,12 +3,15 @@ const sandbox = new URLSearchParams(location.search).has('sandbox');
 
 if (!sandbox) document.body.classList.add('game');
 
-const run = sandbox
+// The Flows build (vite --mode flows) reads the sprites from CDF; other builds never load this code.
+const assetsReady = import.meta.env.VITE_ASSET_SOURCE === 'cdf' ? import('../flows').then((m) => m.connectFlows()) : Promise.resolve();
+
+const run = assetsReady.then(() => sandbox
   ? import('./sandbox').then((m) => {
       document.getElementById('loading')?.remove();
       return m.startSandbox();
     })
-  : import('./play').then((m) => m.startGame(document.getElementById('app')!));
+  : import('./play').then((m) => m.startGame(document.getElementById('app')!)));
 
 run.catch((err) => {
   console.error(err);
