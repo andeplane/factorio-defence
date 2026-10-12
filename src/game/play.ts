@@ -358,16 +358,9 @@ export async function startGame(parent: HTMLElement): Promise<void> {
     renderInfo();
   });
 
-  function startLevel(level: LevelDef): void {
-    scene?.destroy();
-    scene = new LevelScene(engine, level, (Date.now() % 1_000_000) + 1);
-    shownReports = 0;
-    placing = null;
-    paused = false;
-    inspected = null;
-    ui.replaceChildren(hud, orders, shop);
-    renderShop();
-    // Fit the plant into the space above the shop, which is tallest between shifts.
+  /** Fits the plant into the space between the HUD and the shop. Called whenever the shop changes size. */
+  function fitCamera(): void {
+    if (!scene) return;
     const b = scene.game.world.bounds();
     const below = shop.getBoundingClientRect().height + 20;
     const above = 70;
@@ -378,6 +371,18 @@ export async function startGame(parent: HTMLElement): Promise<void> {
     camera.zoomAt(Math.max(0.3, Math.min(1.5, fit)) / camera.zoom, camera.viewWidth / 2, camera.viewHeight / 2);
     camera.x = ((b.minX + b.maxX) / 2) * TILE_PX;
     camera.y = ((b.minY + b.maxY) / 2) * TILE_PX + (below - above) / 2 / camera.zoom;
+  }
+
+  function startLevel(level: LevelDef): void {
+    scene?.destroy();
+    scene = new LevelScene(engine, level, (Date.now() % 1_000_000) + 1);
+    shownReports = 0;
+    placing = null;
+    paused = false;
+    inspected = null;
+    ui.replaceChildren(hud, orders, shop);
+    renderShop();
+    fitCamera();
     const stage = level.stages[0];
     const howTo =
       LEVELS.indexOf(level) === 0
@@ -657,6 +662,7 @@ export async function startGame(parent: HTMLElement): Promise<void> {
       g.startShift();
       paused = false;
       renderShop();
+      fitCamera();
     });
     const guide = el('button', '', 'Guide (G)');
     guide.addEventListener('click', showGuide);
@@ -716,6 +722,7 @@ export async function startGame(parent: HTMLElement): Promise<void> {
     const r = g.reports[g.reports.length - 1];
     scene.sync();
     renderShop();
+    fitCamera();
     if (g.phase === 'won') {
       saveStars(g.level.id, g.stars);
       const next = LEVELS[LEVELS.indexOf(g.level) + 1];
