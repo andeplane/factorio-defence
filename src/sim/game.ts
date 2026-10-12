@@ -36,7 +36,7 @@ export interface Problem {
 }
 
 /** Crews are named after people at Cognite, hired in this order. */
-export const CREW_NAMES = ['Armin', 'Girish', 'Halvard', 'Geir', 'Stein', 'John Markus'];
+export const CREW_NAMES = ['Anders', 'Kristoffer', 'Lars', 'Shehan', 'Niek', 'Stein', 'Geir', 'John Markus', 'Petteri', 'Halvard'];
 
 export interface FeedEntry {
   tick: number;

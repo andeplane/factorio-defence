@@ -14,6 +14,8 @@ export interface EngineOptions {
   generateTile: TileGenerator;
   /** Animation keys to fetch up front; tiles in `tileNames` are always fetched. */
   animationKeys: string[];
+  /** Called as sprite sheets arrive, for a loading bar. */
+  onProgress?: (done: number, total: number) => void;
 }
 
 /**
@@ -55,7 +57,7 @@ export class Engine {
     opts.parent.appendChild(this.app.canvas);
     await this.assets.init();
     const tileKeys = opts.tileNames.flatMap((n) => [n, ...TRANSITION_PIECES.map((p) => `${n}/${p}`)]);
-    await this.assets.preload(opts.animationKeys, tileKeys);
+    await this.assets.preload(opts.animationKeys, tileKeys, opts.onProgress);
 
     this.tiles = new TileMap(this.assets, opts.tileNames, opts.generateTile);
     this.entities = new EntityManager(this.assets);

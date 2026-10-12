@@ -47,7 +47,11 @@ export class AssetStore {
    * manifest can describe thousands of sprites, so only what the game uses is
    * loaded. Keys absent from the manifest are skipped (they use placeholders).
    */
-  async preload(animationKeys: Iterable<string>, tileNames: Iterable<string> = []): Promise<void> {
+  async preload(
+    animationKeys: Iterable<string>,
+    tileNames: Iterable<string> = [],
+    onProgress?: (done: number, total: number) => void,
+  ): Promise<void> {
     if (!this.manifest) return;
     const files = new Set<string>();
     const keys = [...animationKeys];
@@ -60,10 +64,11 @@ export class AssetStore {
       const def = this.manifest.tiles?.[name];
       if (def) files.add(def.file);
     }
+    const todo = [...files].filter((f) => !this.images.has(f) && !this.failed.has(f));
+    let done = 0;
+    onProgress?.(0, todo.length);
     await Promise.all(
-      [...files]
-        .filter((f) => !this.images.has(f) && !this.failed.has(f))
-        .map(async (file) => {
+      todo.map(async (file) => {
           try {
             const tex = await PixiAssets.load<Texture>(this.root + file);
             tex.source.scaleMode = 'linear';
@@ -72,6 +77,7 @@ export class AssetStore {
             this.failed.add(file);
             console.warn(`[assets] could not load ${file}, using placeholder`, err);
           }
+          onProgress?.(++done, todo.length);
         }),
     );
     // Drop placeholders built before these images arrived.

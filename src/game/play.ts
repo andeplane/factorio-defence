@@ -7,6 +7,7 @@ import { expandKey, orientationOf, SpriteStack } from '../engine/SpriteStack';
 import { valueNoise } from '../engine/TileMap';
 import { CARDS, cardText, type CardId } from '../sim/cards';
 import { DIR_VEC, TICKS_PER_SECOND, type Machine } from '../sim/factory';
+import { greedyBot } from '../sim/bots';
 import { Game, describe, type ShiftReport } from '../sim/game';
 import { LEVELS } from '../sim/levels';
 import type { LevelDef } from '../sim/level';
@@ -108,8 +109,11 @@ type CrewAnim = 'idle' | 'running' | 'mining_with_tool';
 const crewLayers = (anim: CrewAnim) => [`character/${anim}/shadow/dir/{dir}`, `character/${anim}/dir/{dir}`, `character/${anim}/2/dir/{dir}`];
 const CREW_ANIMS: CrewAnim[] = ['idle', 'running', 'mining_with_tool'];
 
+/** Where each crew member stands relative to its sim position, in tiles, so no two overlap. */
+const CREW_OFFSETS: [number, number][] = [[0, 0], [0.9, 0.3], [-0.9, 0.3], [0.5, -0.8], [-0.5, -0.8], [0, 1], [1.4, -0.5], [-1.4, -0.5], [1.3, 1.1], [-1.3, 1.1]];
+
 /** One player colour per crew member, in hiring order. */
-const CREW_COLORS = [0xff9800, 0x42a5f5, 0x66bb6a, 0xab47bc, 0xef5350, 0xffee58];
+const CREW_COLORS = [0xff9800, 0x42a5f5, 0x66bb6a, 0xab47bc, 0xef5350, 0xffee58, 0x26c6da, 0xec407a, 0x8d6e63, 0xeceff1];
 
 class LevelScene {
   readonly game: Game;
@@ -210,11 +214,19 @@ class LevelScene {
         g.rect(x - 16, y + 6, 32 * p.severity, 5).fill({ color: 0xff7043 });
       }
     }
+    // Crews share spots (the depot, a machine with two problems), so each stands at its own offset
+    // from the sim position, and labels that would overlap are pushed down a line.
+    const placedLabels: { x: number; y: number }[] = [];
     for (const [i, c] of snap.crews.entries()) {
-      this.drawCrew(c, CREW_COLORS[i % CREW_COLORS.length]);
+      const [ox, oy] = CREW_OFFSETS[i % CREW_OFFSETS.length];
+      const pos = { ...c, x: c.x + ox, y: c.y + oy };
+      this.drawCrew(pos, CREW_COLORS[i % CREW_COLORS.length]);
       const doing = c.state === 'idle' ? 'waiting for a work order' : `${c.state === 'walk' ? 'going to' : 'fixing'} ${PROBLEM_LABEL[c.job!].toLowerCase()}`;
       // At work the crew stands on the problem, whose bar sits just below it, so drop the name lower.
-      this.label(`${c.name} · ${doing}`, c.x, c.y + (c.state === 'work' ? 26 : 14) / TILE_PX, 0xfff3e0, 12, true);
+      let ly = pos.y + (c.state === 'work' ? 26 : 14) / TILE_PX;
+      while (placedLabels.some((l) => Math.abs(l.x - pos.x) < 5 && Math.abs(l.y - ly) < 0.5)) ly += 0.5;
+      placedLabels.push({ x: pos.x, y: ly });
+      this.label(`${c.name} · ${doing}`, pos.x, ly, 0xfff3e0, 12, true);
     }
   }
 
@@ -284,7 +296,14 @@ class LevelScene {
 /** The game: level select, then a level with its HUD, card shop and shift controls. */
 export async function startGame(parent: HTMLElement): Promise<void> {
   const engine = new Engine();
+  const loading = document.getElementById('loading');
+  const setLoading = (pct: number, text: string) => {
+    loading?.style.setProperty('--progress', `${Math.round(pct * 100)}%`);
+    const label = loading?.querySelector('.label');
+    if (label) label.textContent = text;
+  };
   await engine.init({
+    onProgress: (done, total) => setLoading(total ? done / total : 1, `Loading sprites ${done} / ${total}`),
     parent,
     tileNames: TILE_NAMES,
     generateTile,
@@ -316,11 +335,95 @@ export async function startGame(parent: HTMLElement): Promise<void> {
     return { x: Math.floor(w.x / TILE_PX - (size - 1) / 2), y: Math.floor(w.y / TILE_PX - (size - 1) / 2) };
   };
 
+  // ---- Main menu -------------------------------------------------------------
+
+  /** True while a bot plays a plant behind the menus. */
+  let demo = false;
+  const demoStart = performance.now();
+
+  /** A bot runs Green Science at its final stage behind the menus. */
+  function startDemo(): void {
+    if (demo && scene) return;
+    scene?.destroy();
+    const level = LEVELS.find((l) => l.id === 'green-science') ?? LEVELS[0];
+    scene = new LevelScene(engine, level, (Date.now() % 1_000_000) + 1);
+    const g = scene.game;
+    while (g.phase === 'build' && g.stage < level.stages.length) {
+      greedyBot.build(g);
+      g.runShift();
+    }
+    demo = true;
+    paused = false;
+    inspected = null;
+    placing = null;
+    scene.sync();
+    const b = g.world.bounds();
+    const fit = Math.min(camera.viewWidth / ((b.maxX - b.minX + 4) * TILE_PX), camera.viewHeight / ((b.maxY - b.minY + 6) * TILE_PX));
+    camera.zoomAt(Math.max(0.6, Math.min(1.3, fit * 1.8)) / camera.zoom, camera.viewWidth / 2, camera.viewHeight / 2);
+  }
+
+  /** Keeps the menu's plant running: the bot buys cards between shifts and starts the next one. */
+  function stepDemo(): void {
+    const g = scene!.game;
+    if (g.phase === 'won' || g.phase === 'lost') {
+      demo = false;
+      startDemo();
+      return;
+    }
+    if (g.phase === 'build') {
+      greedyBot.build(g);
+      g.startShift();
+      scene!.sync();
+    }
+    for (let i = 0; i < 2 && g.phase === 'shift'; i++, engine.timeScale++) g.step();
+  }
+
+  /** The level to continue from: the first one without stars. */
+  const nextLevel = () => {
+    const stars = loadStars();
+    return LEVELS.find((l) => !stars[l.id]) ?? LEVELS[LEVELS.length - 1];
+  };
+
+  function showMainMenu(): void {
+    startDemo();
+    ui.replaceChildren();
+    const panel = el('div', 'panel mainmenu');
+    const played = Object.keys(loadStars()).length > 0;
+    const next = nextLevel();
+    const play = el('button', 'primary', played ? `Continue: ${LEVELS.indexOf(next) + 1}. ${next.name}` : 'New game');
+    play.addEventListener('click', () => startLevel(next));
+    const levels = el('button', '', 'Levels');
+    levels.addEventListener('click', showLevelSelect);
+    const how = el('button', '', 'How to play');
+    how.addEventListener('click', showHowToPlay);
+    panel.append(
+      el('h1', '', 'Factorio Defence'),
+      el('p', 'sub', 'Keep the factory running. Problems will come. Cognite helps you see them first.'),
+      play,
+      levels,
+      how,
+      el('small', 'credit', 'A fan-made Cognite demo. Factorio graphics © Wube Software, not affiliated.'),
+    );
+    ui.appendChild(panel);
+  }
+
+  function showHowToPlay(): void {
+    showModal(
+      'How to play',
+      `<p>Each level is a plant that has to deliver an order every shift. Miss three orders and the level is lost; fewer misses means more stars.</p>` +
+        `<p>During a shift, problems hit machines, belts and inserters. Your crew fixes them, but only once someone has <b>spotted</b> them. ` +
+        `Between shifts you buy Cognite products: they connect the plant's data, spot problems early, get crews there faster and prevent problems altogether.</p>` +
+        `<p><b>Controls:</b> drag or WASD to pan, mouse wheel to zoom, click a machine or the delivery chest to inspect it. Keys 1, 2, 3 set the shift speed, space pauses, G opens the guide.</p>` +
+        guideHtml(LEVELS[LEVELS.length - 1]),
+      'Back',
+    );
+    modal.classList.add('wide');
+  }
+
   // ---- Level select ----------------------------------------------------------
 
   function showLevelSelect(): void {
-    scene?.destroy();
-    scene = null;
+    startDemo();
     ui.replaceChildren();
     const stars = loadStars();
     const panel = el('div', 'panel menu');
@@ -335,7 +438,11 @@ export async function startGame(parent: HTMLElement): Promise<void> {
       b.addEventListener('click', () => startLevel(level));
       grid.appendChild(b);
     });
-    panel.appendChild(grid);
+    const back = el('button', '', 'Back');
+    back.addEventListener('click', showMainMenu);
+    const row = el('div', 'row');
+    row.appendChild(back);
+    panel.append(grid, row);
     ui.appendChild(panel);
   }
 
@@ -374,6 +481,7 @@ export async function startGame(parent: HTMLElement): Promise<void> {
   }
 
   function startLevel(level: LevelDef): void {
+    demo = false;
     scene?.destroy();
     scene = new LevelScene(engine, level, (Date.now() % 1_000_000) + 1);
     shownReports = 0;
@@ -600,7 +708,7 @@ export async function startGame(parent: HTMLElement): Promise<void> {
       row.appendChild(p);
       const guide = el('button', '', 'Guide (G)');
       guide.addEventListener('click', showGuide);
-      row.appendChild(guide);
+      row.append(guide, menuButton());
       shop.append(el('div', 'title', `${paused ? 'Shift paused' : 'Shift running'} · keys 1, 2, 3 set the speed, space pauses`), row);
       return;
     }
@@ -666,11 +774,20 @@ export async function startGame(parent: HTMLElement): Promise<void> {
     });
     const guide = el('button', '', 'Guide (G)');
     guide.addEventListener('click', showGuide);
-    row.append(reroll, go, guide);
+    row.append(reroll, go, guide, menuButton());
     const owned = [...g.owned.entries()].map(([c, n]) => (n > 1 ? `${CARDS[c].name} x${n}` : CARDS[c].name)).join(', ');
     shop.append(head, cards, row);
     if (placing) shop.append(el('div', 'hint', `Click the map to place ${CARDS[placing.card].name}. Esc cancels.`));
     if (owned) shop.append(el('div', 'owned', `Owned: ${owned}`));
+  }
+
+  function menuButton(): HTMLButtonElement {
+    const b = el('button', '', 'Menu');
+    b.addEventListener('click', () => {
+      paused = true;
+      showModal('Leave this level?', '<p>Progress in this level is lost.</p>', 'Keep playing', () => (paused = false), ['Main menu', showMainMenu]);
+    });
+    return b;
   }
 
   /** Buys the card in a shown offer slot, leaving a "Bought" slot behind. */
@@ -781,7 +898,7 @@ export async function startGame(parent: HTMLElement): Promise<void> {
         scene.sync();
       }
       renderShop();
-    } else if (click && scene) {
+    } else if (click && scene && !demo) {
       inspected = pickAt();
       renderInfo();
     }
@@ -802,6 +919,7 @@ export async function startGame(parent: HTMLElement): Promise<void> {
       inspected = null;
       renderInfo();
     }
+    if (demo) return;
     if ((ev.key === 'g' || ev.key === 'G') && scene && !modal.isConnected) showGuide();
     const speedKey = ['1', '2', '3'].indexOf(ev.key);
     if (speedKey >= 0 && scene?.game.phase === 'shift') {
@@ -821,6 +939,7 @@ export async function startGame(parent: HTMLElement): Promise<void> {
   engine.onTick(() => {
     // Animations follow the simulation: frozen while it is stopped, faster when it is sped up.
     engine.timeScale = 0;
+    if (scene && demo) return stepDemo();
     if (!scene || paused || modal.isConnected) return;
     const g = scene.game;
     if (g.phase !== 'shift') return;
@@ -834,6 +953,16 @@ export async function startGame(parent: HTMLElement): Promise<void> {
   engine.onFrame((dt) => {
     if (!scene) return;
     scene.render(performance.now());
+    if (demo) {
+      // Drift slowly along the plant behind the menu.
+      const b = scene.game.world.bounds();
+      const t = (performance.now() - demoStart) / 1000;
+      // Keep the plant in the space right of the menu panel.
+      const menuRight = (ui.querySelector('.mainmenu, .menu')?.getBoundingClientRect().right ?? 0) * 0.5;
+      camera.x = ((b.minX + b.maxX) / 2 + Math.sin(t / 14) * (b.maxX - b.minX) * 0.2) * TILE_PX - menuRight / camera.zoom;
+      camera.y = ((b.minY + b.maxY) / 2 + Math.cos(t / 19) * 2) * TILE_PX;
+      return;
+    }
     if (placing) {
       const size = CARDS[placing.card].placed!.size;
       const t = hoverTile(size);
@@ -846,7 +975,9 @@ export async function startGame(parent: HTMLElement): Promise<void> {
     }
   });
 
-  showLevelSelect();
+  showMainMenu();
+  loading?.classList.add('done');
+  setTimeout(() => loading?.remove(), 600);
   (window as unknown as { game: () => Game | undefined }).game = () => scene?.game;
   (window as unknown as { engine: Engine }).engine = engine;
 }

@@ -69,6 +69,18 @@
       .menu .level small { opacity: 0.8; }
       .menu .level small.new { color: #ffb74d; opacity: 1; margin-top: 4px; }
       .flash { top: 70px; left: 50%; transform: translateX(-50%); color: #ff8a65; }
+      #loading { position: fixed; inset: 0; z-index: 10; display: grid; place-items: center; background: #1b1b1b; transition: opacity 0.5s; --progress: 0%; }
+      #loading.done { opacity: 0; pointer-events: none; }
+      #loading .box { width: min(420px, calc(100vw - 40px)); text-align: center; }
+      #loading h1 { margin: 0 0 16px; color: #ffcc66; font-size: 28px; }
+      #loading .bar { height: 14px; background: #121110; border: 2px solid #121110; box-shadow: inset 0 0 0 1px #57534a; }
+      #loading .bar i { display: block; height: 100%; width: var(--progress); background: linear-gradient(#ffcc66, #c48a1e); transition: width 0.15s; }
+      #loading .label { margin-top: 8px; opacity: 0.75; font-size: 12px; }
+      .mainmenu { top: 50%; left: max(20px, 6vw); transform: translateY(-50%); width: min(340px, calc(100vw - 40px)); box-sizing: border-box; display: flex; flex-direction: column; gap: 8px; padding: 18px; background: rgba(40, 38, 34, 0.92); }
+      .mainmenu h1 { margin: 0; color: #ffcc66; font-size: 28px; }
+      .mainmenu .sub { margin: 0 0 8px; opacity: 0.85; }
+      .mainmenu button { font-size: 15px; padding: 10px 14px; text-align: left; }
+      .mainmenu .credit { margin-top: 8px; opacity: 0.55; font-size: 11px; }
       @media (max-width: 640px) {
         .orders { top: auto; bottom: 230px; right: 10px; width: 180px; }
         .orders .feed li:nth-child(n+3) { display: none; }
@@ -78,6 +90,7 @@
     </style>
   </head>
   <body>
+    <div id="loading"><div class="box"><h1>Factorio Defence</h1><div class="bar"><i></i></div><div class="label">Loading the game…</div></div></div>
     <div id="app"></div>
     <div id="info" class="panel"></div>
     <div id="help" class="panel">

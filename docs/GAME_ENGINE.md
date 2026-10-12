@@ -101,7 +101,7 @@ Level packs repeat the ramp one layer up:
 - **Pack 2, fluids.** Pumpjacks, pipes, storage tanks, refineries and chemical plants: crude oil to plastic and sulfur. New threats that suit fluids: leaks, pressure loss, corrosion and tank overflow. Problems spread along a pipe network instead of staying on one tile, so connecting the whole network to Data Fusion matters more.
 - **Pack 3, sites.** Several plants on one map joined by trains, so one site's outage hits another's orders. Problems that only show up when you compare sites.
 
-Each crew member is named after someone at Cognite (Armin, Girish, Halvard, Geir, Stein, John Markus, in order of hiring). The shift report shows who did the repairs.
+Each crew member is named after someone at Cognite (Anders, Kristoffer, Lars, Shehan, Niek, Stein, Geir, John Markus, Petteri, Halvard, in order of hiring). The shift report shows who did the repairs.
 
 ## Economy
 
