@@ -43,6 +43,8 @@ export class SpriteStack {
   private cx = 0;
   private cy = 0;
   private zBase = 0;
+  /** Multiplies every non-shadow layer's colour, e.g. to grey out an offline entity. */
+  private tintOverride: number | null = null;
 
   constructor(
     assets: AssetStore,
@@ -89,6 +91,13 @@ export class SpriteStack {
     }
   }
 
+  /** Tints the whole entity (null restores its own colours). */
+  setTint(color: number | null): void {
+    if (color === this.tintOverride) return;
+    this.tintOverride = color;
+    for (const l of this.layers) if (l.current) this.place(l, l.current);
+  }
+
   destroy(): void {
     for (const l of this.layers) l.sprite.destroy();
     this.layers = [];
@@ -102,7 +111,14 @@ export class SpriteStack {
     s.blendMode = anim.def.additive ? 'add' : 'normal';
     const tint = parseTint(anim.def.tint);
     s.tint = anim.def.applyRuntimeTint && this.runtimeTint !== undefined ? this.runtimeTint : (tint?.color ?? 0xffffff);
+    if (this.tintOverride !== null && !anim.def.drawAsShadow) s.tint = multiply(s.tint.valueOf() as number, this.tintOverride);
     s.alpha = tint?.alpha ?? 1;
     if (s.parent === this.objectParent) s.zIndex = this.zBase * 1000 + this.layers.indexOf(l);
   }
+}
+
+/** Component-wise product of two 0xRRGGBB colours, like a GPU tint. */
+function multiply(a: number, b: number): number {
+  const ch = (shift: number) => Math.round((((a >> shift) & 255) * ((b >> shift) & 255)) / 255) << shift;
+  return ch(16) | ch(8) | ch(0);
 }
