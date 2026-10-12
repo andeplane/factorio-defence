@@ -1,0 +1,30 @@
+{
+  "name": "factorio-defence",
+  "private": true,
+  "version": "0.0.1",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "extract-sprites": "bash tools/factorio-extract/extract.sh",
+    "balance": "vite-node tools/balance.ts --",
+    "capacity": "vite-node tools/capacity.ts",
+    "trace": "vite-node tools/trace.ts --",
+    "balance:all": "bash tools/balance-all.sh",
+    "tune": "vite-node tools/tune.ts --",
+    "tune:all": "bash tools/tune-all.sh",
+    "compare": "vite-node tools/compare.ts --",
+    "deploy:pages": "bash tools/deploy-pages.sh"
+  },
+  "dependencies": {
+    "pixi.js": "^8.22.0"
+  },
+  "devDependencies": {
+    "typescript": "~5.9.3",
+    "vite": "^7.3.7",
+    "vitest": "^3.2.7"
+  }
+}
