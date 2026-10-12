@@ -1,3 +1,6 @@
+// Fusion's CSP has no 'unsafe-eval', so PixiJS needs its eval-free shader and uniform code.
+// This module is imported before the game creates a renderer.
+import 'pixi.js/unsafe-eval';
 import { connectToHostApp } from '@cognite/app-sdk';
 import { setAssetSource } from '../engine/Assets';
 import { CDF_SPRITE_SPACE, cdfAssetSource } from './cdfAssets';
