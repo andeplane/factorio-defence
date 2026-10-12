@@ -3,10 +3,11 @@ import { TICKS_PER_SECOND, type BeltLine, type Inserter, type Machine } from './
 import { THREAT_COST, type BossEvent, type LevelDef, type Order, type ThreatType } from './level';
 import { ITEM_VALUE, type ItemName } from './recipes';
 import { Rng } from './rng';
+import { PROBLEMS, RULE, type ProblemType } from './rules';
 import { World } from './world';
 
 export type Phase = 'build' | 'shift' | 'won' | 'lost';
-export type ProblemType = 'wear' | 'clog' | 'jam' | 'drift' | 'false-alarm';
+export type { ProblemType } from './rules';
 
 /** A problem on a piece of equipment. Unfixed problems carry over into the next shift. */
 export interface Problem {
@@ -56,17 +57,10 @@ const DETECTED_BY: Record<string, string> = {
   'atlas-ai': 'Atlas AI flagged',
 };
 
-export const PROBLEM_NAME: Record<ProblemType, string> = {
-  wear: 'bearing wear',
-  clog: 'a clogged belt',
-  jam: 'a jammed inserter',
-  drift: 'sensor drift',
-  'false-alarm': 'a false alarm',
-};
-
 /** A problem in words: "bearing wear on the iron gear wheel assembler", "a clogged belt". */
 export function describe(p: Problem): string {
-  return p.machine ? `${PROBLEM_NAME[p.type]} on ${placeOf(p)}` : PROBLEM_NAME[p.type];
+  const noun = p.type === 'wear' && p.severity >= 1 ? 'a seized bearing' : PROBLEMS[p.type].noun;
+  return p.machine ? `${noun} on ${placeOf(p)}` : noun;
 }
 
 /** Where a problem is, in words: "the iron gear wheel assembler". */
@@ -125,6 +119,10 @@ export interface ShiftReport {
   hidden: number;
   /** Repairs per crew member this shift. */
   fixesBy: Record<string, number>;
+  /** Worn bearings replaced before they seized. */
+  predictive: number;
+  /** Game tick the shift started, to pick its entries out of the feed. */
+  startTick: number;
 }
 
 /** Cards that help against each threat, used to make sure a new threat comes with an answer. */
@@ -139,30 +137,19 @@ const COUNTERS: Record<ThreatType | BossEvent['type'], CardId[]> = {
 };
 
 /** Paid per crew at the end of every shift. */
-export const CREW_WAGE = 12;
-const CREW_PRICE_STEP = 30;
+export const CREW_WAGE = RULE.crewWage;
+const CREW_PRICE_STEP = RULE.crewPriceStep;
 
-const DISPATCH_DELAY = 6 * TICKS_PER_SECOND;
-const CREW_SPEED = 4 / TICKS_PER_SECOND;
-const SEARCH_PERIOD = 20 * TICKS_PER_SECOND;
-const TRIP_SECONDS = 12;
+const DISPATCH_DELAY = RULE.dispatchDelay * TICKS_PER_SECOND;
+const CREW_SPEED = RULE.crewSpeed / TICKS_PER_SECOND;
+const SEARCH_PERIOD = RULE.searchPeriod * TICKS_PER_SECOND;
 /** New equipment is commissioned (run without problems or deliveries) before its first shift. */
 const COMMISSION_SECONDS = 60;
 
 /** Repair time in seconds and cost, by problem. */
 function repairOf(p: Problem): { seconds: number; cost: number } {
-  switch (p.type) {
-    case 'wear':
-      return p.severity >= 1 ? { seconds: 15, cost: 60 } : { seconds: 3, cost: 10 };
-    case 'clog':
-      return { seconds: 4, cost: 8 };
-    case 'jam':
-      return { seconds: 3, cost: 6 };
-    case 'drift':
-      return { seconds: 4, cost: 15 };
-    case 'false-alarm':
-      return { seconds: 3, cost: 0 };
-  }
+  const r = PROBLEMS[p.type].repair;
+  return p.type === 'wear' && p.severity >= 1 && r.late ? r.late : r;
 }
 
 /** How much a problem hurts right now, for Atlas AI's dispatch order. */
@@ -220,6 +207,7 @@ export class Game {
   private spawned: Partial<Record<ProblemType, number>> = {};
   private detectedEarly = 0;
   private fixesBy: Record<string, number> = {};
+  private predictive = 0;
   /** What happened this level, newest last, for the in-game feed: spotted, dispatched, fixed, broken. */
   readonly feed: FeedEntry[] = [];
   private breakdowns = 0;
@@ -457,7 +445,7 @@ export class Game {
         if (!best || v.weight > this.level.threats[best]!.weight) best = t;
     }
     if (!best) return;
-    this.rca.set(best, (this.rca.get(best) ?? 1) * 0.6);
+    this.rca.set(best, (this.rca.get(best) ?? 1) * RULE.canvasRate);
     this.makePlan();
   }
 
@@ -492,6 +480,7 @@ export class Game {
     this.spawned = {};
     this.detectedEarly = 0;
     this.fixesBy = {};
+    this.predictive = 0;
     this.breakdowns = 0;
     this.nextSearch = this.tick + SEARCH_PERIOD;
     if (this.has('maintain')) {
@@ -513,7 +502,7 @@ export class Game {
     for (const e of this.events) {
       if (e.second < second || e.second >= nextSecond) continue;
       this.note('event', e.type === 'trip' ? 'Plant trip! Everything stops until power is restored.' : 'Knowledge loss: an experienced operator retired. Repairs are slower without the data.');
-      if (e.type === 'trip') this.tripUntil = this.tick + TRIP_SECONDS * (this.has('simulators') ? 0.5 : 1) * TICKS_PER_SECOND;
+      if (e.type === 'trip') this.tripUntil = this.tick + RULE.tripSeconds * (this.has('simulators') ? RULE.simulatorsTrip : 1) * TICKS_PER_SECOND;
       else this.knowledgeLoss = true;
     }
 
@@ -526,9 +515,9 @@ export class Game {
         const w = this.wear.get(m);
         if (!w) return 1;
         if (w.severity >= 1) return 0;
-        return w.severity >= 0.5 ? 0.7 : 1;
+        return w.severity >= RULE.wearSlowAt ? RULE.wearSlowSpeed : 1;
       },
-      (m) => (this.drift.has(m) ? 0.4 : 0),
+      (m) => (this.drift.has(m) ? RULE.driftOffSpec : 0),
       (i) => !tripped && !this.jams.has(i),
     );
 
@@ -610,30 +599,32 @@ export class Game {
     return p;
   }
 
+  /** Who spots a hidden problem this tick, if anyone, following PROBLEMS in rules.ts. */
   private detection(p: Problem): string | null {
+    const rule = PROBLEMS[p.type];
+    if (p.type === 'false-alarm') return 'alarm';
+    if (p.type === 'wear' && p.severity >= 1) return 'breakdown';
     const age = (this.tick - p.start) / TICKS_PER_SECOND;
+    const progress = p.type === 'wear' ? p.severity : age;
     const conn = this.connected(p.x, p.y);
-    const charts = conn && this.covered('charts', p.x, p.y);
-    const robot = this.covered('inrobot', p.x, p.y);
-    switch (p.type) {
-      case 'false-alarm':
-        return 'alarm';
-      case 'wear':
-        if (p.severity >= 1) return 'breakdown';
-        if (charts && p.severity >= 0.15) return 'charts';
-        if (conn && this.has('asset-data-insights') && p.severity >= 0.3) return 'asset-data-insights';
-        if (robot && p.severity >= 0.35) return 'inrobot';
-        return null;
-      case 'clog':
-      case 'jam': {
-        if (charts && age >= 1) return 'charts';
-        if (robot && age >= 3) return 'inrobot';
-        const obvious = (p.type === 'clog' ? 12 : 8) * (conn ? 0.5 : 1);
-        return age >= obvious ? 'operator' : null;
-      }
-      case 'drift':
-        return charts && age >= 5 ? 'charts' : null;
+    for (const { by, at } of rule.spot) {
+      if (progress < at) continue;
+      // InRobot inspects in person; the others read data, so the equipment must be connected.
+      const ok = by === 'inrobot' ? this.covered('inrobot', p.x, p.y) : conn && (by === 'charts' ? this.covered('charts', p.x, p.y) : this.has(by));
+      if (ok) return by;
     }
+    if (rule.operatorSeconds !== null && age >= rule.operatorSeconds * (conn ? RULE.connectedOperator : 1)) return 'operator';
+    return null;
+  }
+
+  private fixText(c: Crew, p: Problem): string {
+    if (p.type === 'false-alarm') return `${c.name} checked the alarm on ${placeOf(p)}: nothing wrong. Time wasted.`;
+    if (p.type === 'wear') {
+      const { late } = PROBLEMS.wear.repair;
+      if (p.severity >= 1) return `${c.name} rebuilt the seized ${placeOf(p).replace(/^the /, '')}. That took ${late!.seconds} s.`;
+      return `${c.name} replaced a worn bearing on ${placeOf(p)} before it seized. Predictive maintenance!`;
+    }
+    return `${c.name} fixed ${describe(p)}.`;
   }
 
   private note(kind: FeedEntry['kind'], text: string): void {
@@ -645,7 +636,7 @@ export class Game {
     p.detected = this.tick;
     p.detectedBy = by;
     if (p.type === 'false-alarm') this.note('spotted', `Alarm on ${placeOf(p)}. Could be nothing.`);
-    else if (by === 'breakdown') this.note('bad', `${placeOf(p).replace(/^./, (c) => c.toUpperCase())} broke down: ${PROBLEM_NAME[p.type]}.`);
+    else if (by === 'breakdown') this.note('bad', `${placeOf(p).replace(/^./, (c) => c.toUpperCase())} seized: ${PROBLEMS[p.type].noun}.`);
     else this.note('spotted', `${DETECTED_BY[by] ?? by} ${describe(p)}.`);
     p.orderAt = this.tick + (this.has('flows') ? 0 : DISPATCH_DELAY);
     if (by !== 'breakdown' && by !== 'operator' && by !== 'alarm' && by !== 'quality-report') this.detectedEarly++;
@@ -654,7 +645,7 @@ export class Game {
         this.note('fixed', `Atlas AI dismissed a false alarm on ${placeOf(p)}.`);
         this.fix(p, 0);
       }
-      else if (p.type === 'drift') p.remoteFixAt = this.tick + 5 * TICKS_PER_SECOND;
+      else if (p.type === 'drift') p.remoteFixAt = this.tick + RULE.atlasRecalibrate * TICKS_PER_SECOND;
     }
   }
 
@@ -723,7 +714,7 @@ export class Game {
   }
 
   private updateCrews(): void {
-    const speed = CREW_SPEED * (this.has('infield') ? 1.5 : 1);
+    const speed = CREW_SPEED * (this.has('infield') ? RULE.infieldSpeed : 1);
     for (const c of this.crews) {
       if (c.state === 'idle') {
         const job = this.nextJob(c);
@@ -747,14 +738,15 @@ export class Game {
         c.y = p.y;
         const r = repairOf(p);
         let seconds = r.seconds;
-        if (p.machine && this.has('asset-data-insights') && this.connected(p.x, p.y)) seconds *= 0.6;
-        if (this.knowledgeLoss && !this.has('data-fusion')) seconds *= 1.5;
+        if (p.machine && this.has('asset-data-insights') && this.connected(p.x, p.y)) seconds *= RULE.adiRepair;
+        if (this.knowledgeLoss && !this.has('data-fusion')) seconds *= RULE.knowledgeLoss;
         c.workLeft = Math.round(seconds * TICKS_PER_SECOND);
-        c.workCost = r.cost * (this.has('infield') ? 0.75 : 1);
+        c.workCost = r.cost * (this.has('infield') ? RULE.infieldCost : 1);
         c.state = 'work';
       }
       if (c.state === 'work' && --c.workLeft <= 0) {
-        this.note('fixed', p.type === 'false-alarm' ? `${c.name} checked the alarm: nothing wrong.` : `${c.name} fixed ${describe(p)}.`);
+        this.note('fixed', this.fixText(c, p));
+        if (p.type === 'wear' && p.severity < 1) this.predictive++;
         this.fixesBy[c.name] = (this.fixesBy[c.name] ?? 0) + 1;
         this.fix(p, c.workCost);
       }
@@ -766,7 +758,7 @@ export class Game {
     this.money -= wages;
     // The quality lab finds drifting sensors from the shift's off-spec output, too late to save it.
     for (const p of this.problems)
-      if (p.type === 'drift' && !p.fixed && p.detected === null && this.tick - p.start > 30 * TICKS_PER_SECOND)
+      if (p.type === 'drift' && !p.fixed && p.detected === null && this.tick - p.start >= RULE.qualityLabSeconds * TICKS_PER_SECOND)
         this.markDetected(p, 'quality-report');
     const orders: OrderResult[] = this.orders.map((o) => {
       const delivered = this.deliveredThisShift(o.item);
@@ -786,6 +778,8 @@ export class Game {
       offSpecDelivered: offSpec,
       hidden: this.openProblems().filter((p) => p.detected === null).length,
       fixesBy: this.fixesBy,
+      predictive: this.predictive,
+      startTick: this.tick - this.shiftTick,
     });
     // Fixed problems are history now.
     const open = this.openProblems();

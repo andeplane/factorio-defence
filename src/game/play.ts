@@ -6,9 +6,10 @@ import { FactoryView, factoryViewKeys } from '../engine/FactoryView';
 import { valueNoise } from '../engine/TileMap';
 import { CARDS, type CardId } from '../sim/cards';
 import { DIR_VEC, TICKS_PER_SECOND, type Machine } from '../sim/factory';
-import { Game, type ShiftReport } from '../sim/game';
+import { Game, describe, type ShiftReport } from '../sim/game';
 import { LEVELS } from '../sim/levels';
 import type { LevelDef } from '../sim/level';
+import { PROBLEMS, RULE, spotWhen, type ProblemType } from '../sim/rules';
 import { snapshot } from '../sim/snapshot';
 import { beltCurveFrom } from './belts';
 import { ITEM_NAMES, PROTOTYPES, TILE_NAMES } from './prototypes';
@@ -53,21 +54,24 @@ const ITEM_LABEL: Record<string, string> = {
 };
 
 /** Problem names short enough for a label on the map. */
-const SHORT_PROBLEM: Record<string, string> = { wear: 'Wear', clog: 'Clog', jam: 'Jam', drift: 'Sensor drift', 'false-alarm': 'Alarm?' };
+
 
 /** Shift speeds, also on keys 1, 2 and 3. */
 const SPEEDS = [1, 2, 4];
 
 const itemLabel = (item: string) => ITEM_LABEL[item] ?? item.replace(/-/g, ' ').replace(/^./, (c) => c.toUpperCase());
 
+/** Problem and threat names, all from the rules table. Threats are what the forecast lists. */
 const PROBLEM_LABEL: Record<string, string> = {
-  wear: 'Bearing wear',
-  clog: 'Clog',
-  jam: 'Inserter jam',
-  drift: 'Sensor drift',
-  'false-alarm': 'False alarm',
+  ...Object.fromEntries(Object.entries(PROBLEMS).map(([k, v]) => [k, v.name])),
   flood: 'Alarm flood',
 };
+
+/** The label on a problem: "Bearing wear 40%", "Seized: bearing wear", "Clogged belt". */
+function problemLabel(type: string, severity: number): string {
+  if (type !== 'wear') return PROBLEM_LABEL[type];
+  return severity >= 1 ? 'Seized: bearing wear' : `Bearing wear ${Math.round(severity * 100)}%`;
+}
 
 const CARD_COLOR: Partial<Record<CardId, number>> = {
   extractor: 0x4fc3f7,
@@ -173,7 +177,7 @@ class LevelScene {
       const color = p.type === 'false-alarm' ? 0xffd54f : p.type === 'wear' && p.severity >= 1 ? 0xff1744 : 0xff7043;
       g.circle(x, y - 10, 11).fill({ color, alpha: pulse }).stroke({ color: 0x1b1b1b, width: 2 });
       this.label('!', p.x, p.y - 10 / TILE_PX, 0x1b1b1b, 15);
-      const name = p.type === 'wear' ? (p.severity >= 1 ? 'BROKEN' : `Wear ${Math.round(p.severity * 100)}%`) : SHORT_PROBLEM[p.type];
+      const name = problemLabel(p.type, p.severity);
       this.label(name + (p.crewed ? ' · crew coming' : ''), p.x, p.y - 30 / TILE_PX, 0xffffff, 12, true);
       if (p.type === 'wear' && p.severity < 1) {
         g.rect(x - 16, y + 6, 32, 5).fill({ color: 0x1b1b1b });
@@ -185,7 +189,7 @@ class LevelScene {
       const y = c.y * TILE_PX;
       if (c.state === 'work') g.circle(x, y, 10 + 4 * pulse).stroke({ color: 0xffa726, width: 2, alpha: 0.8 });
       g.circle(x, y, 7).fill({ color: 0xffa726 }).stroke({ color: 0x1b1b1b, width: 2 });
-      const doing = c.state === 'idle' ? 'waiting for a work order' : `${c.state === 'walk' ? 'going to' : 'fixing'} ${SHORT_PROBLEM[c.job!].toLowerCase()}`;
+      const doing = c.state === 'idle' ? 'waiting for a work order' : `${c.state === 'walk' ? 'going to' : 'fixing'} ${PROBLEM_LABEL[c.job!].toLowerCase()}`;
       this.label(`${c.name} · ${doing}`, c.x, c.y + 20 / TILE_PX, 0xfff3e0, 12, true);
     }
   }
@@ -306,13 +310,14 @@ export async function startGame(parent: HTMLElement): Promise<void> {
       LEVELS.indexOf(level) === 0
         ? `<p>Each round is a shift. Deliver the order to the dock before the shift ends. Miss three orders and the level is lost.</p>` +
           `<p>Problems will hit your machines, belts and inserters. Crews only fix what someone has noticed. ` +
-          `Between shifts, buy Cognite cards to see problems sooner and fix them faster. The grey haze is equipment nobody has data on.</p>`
+          `Between shifts, buy Cognite cards to see problems sooner and fix them faster. The grey haze is equipment nobody has data on. Press G any time for the guide to every problem and its counters.</p>`
         : '';
     showModal(`${level.name}`, `<p>${level.text}</p><p><b>New:</b> ${level.introduces}</p>${howTo}<p><b>${stage.title}.</b> ${stage.text}</p>`, 'Start');
     renderShop();
   }
 
   function showModal(title: string, html: string, button: string, onClose?: () => void, second?: [string, () => void]): void {
+    modal.classList.remove('wide');
     modal.innerHTML = `<h2>${title}</h2>${html}`;
     const row = el('div', 'row');
     const ok = el('button', 'primary', button);
@@ -331,6 +336,52 @@ export async function startGame(parent: HTMLElement): Promise<void> {
     }
     modal.appendChild(row);
     ui.appendChild(modal);
+  }
+
+  /** The rules of the repair loop, generated from the same table the simulation uses. */
+  function guideHtml(level: LevelDef): string {
+    const has = (c: CardId) => level.cards.includes(c);
+    const card = (c: CardId) => (has(c) ? `<b>${CARDS[c].name}</b>` : `<span class="dim">${CARDS[c].name} (later levels)</span>`);
+    const threats = new Set(Object.keys(level.threats).map((t) => (t === 'flood' ? 'false-alarm' : t)));
+    const rows = (Object.keys(PROBLEMS) as ProblemType[])
+      .map((t) => {
+        const r = PROBLEMS[t];
+        const spot = r.spot.map((x) => `${card(x.by)} ${spotWhen(t, x.at)}`);
+        if (t !== 'false-alarm' && t !== 'wear' && t !== 'drift') spot.push(`${card('data-fusion')} halves the time operators take`);
+        if (t !== 'false-alarm') spot.push(`${card('search')} turns up the oldest hidden problem every ${RULE.searchPeriod} s`);
+        const fix = r.repair.late
+          ? `${r.repair.seconds} s and $${r.repair.cost} if caught early; ${r.repair.late.seconds} s and $${r.repair.late.cost} once seized`
+          : `${r.repair.seconds} s, $${r.repair.cost}`;
+        const extra =
+          t === 'wear' ? `<br>Prevent: ${card('maintain')} services connected machines before each shift. ${card('canvas')} makes the most common problem rarer.` :
+          t === 'drift' ? `<br>${card('atlas-ai')} recalibrates it remotely ${RULE.atlasRecalibrate} s after it is spotted.` :
+          t === 'false-alarm' ? `<br>${card('atlas-ai')} dismisses false alarms so no crew goes out.` : '';
+        return (
+          `<div class="rule${threats.has(t) ? '' : ' dim'}"><b>${r.name}</b> <small>on ${r.on}${threats.has(t) ? '' : ' · not in this level'}</small>` +
+          `<br>${r.what}<br><i>Without Cognite:</i> ${r.unaided}` +
+          (spot.length ? `<br><i>Spotted early by:</i> ${spot.join('; ')}.` : '') +
+          `<br><i>Crew repair:</i> ${fix}.${extra}</div>`
+        );
+      })
+      .join('');
+    return (
+      `<p>A problem gets fixed only after it is <b>spotted</b>. A work order then goes out after ${RULE.dispatchDelay} s (${card('flows')}: at once), ` +
+      `and the nearest free crew member walks there and <b>fixes</b> it. Crews are the only ones who repair things. ` +
+      `More crews (${card('crew')}) means more fixes at once; ${card('infield')} makes them walk faster and repair cheaper.</p>` +
+      `<p>Cognite products that read data (Charts, Asset Data Insights, Atlas AI, Maintain) only see equipment <b>connected</b> by a Data Fusion hub or an Extractor. The grey haze is unconnected equipment. InRobot inspects in person and needs no connection.</p>` +
+      rows
+    );
+  }
+
+  function showGuide(): void {
+    if (!scene) return;
+    const wasPaused = paused;
+    paused = true;
+    showModal('How problems get fixed', guideHtml(scene.game.level), 'Back to the plant', () => {
+      paused = wasPaused;
+      renderShop();
+    });
+    modal.classList.add('wide');
   }
 
   function renderHud(): void {
@@ -396,7 +447,7 @@ export async function startGame(parent: HTMLElement): Promise<void> {
       const known = g.openProblems().filter((p) => p.machine === m && p.detected !== null);
       const state = m.working ? 'Working' : g.phase === 'shift' ? '<span class="warn">Idle</span>' : 'Stopped between shifts';
       const problems = known.length
-        ? known.map((p) => `<li class="warn">${PROBLEM_LABEL[p.type]}${p.type === 'wear' ? ` ${Math.round(p.severity * 100)}%` : ''}</li>`).join('')
+        ? known.map((p) => `<li class="warn">${problemLabel(p.type, p.severity)}</li>`).join('')
         : '<li>No known problems</li>';
       info.innerHTML =
         `${close}<b>${name}</b> making ${product}` +
@@ -441,19 +492,22 @@ export async function startGame(parent: HTMLElement): Promise<void> {
         });
         row.appendChild(b);
       }
-      const p = el('button', paused ? 'active' : '', 'Pause');
+      const p = el('button', paused ? 'active' : '', paused ? 'Resume' : 'Pause');
       p.addEventListener('click', () => {
         paused = !paused;
         renderShop();
       });
       row.appendChild(p);
-      shop.append(el('div', 'title', 'Shift running · keys 1, 2, 3 set the speed, space pauses'), row);
+      const guide = el('button', '', 'Guide (G)');
+      guide.addEventListener('click', showGuide);
+      row.appendChild(guide);
+      shop.append(el('div', 'title', `${paused ? 'Shift paused' : 'Shift running'} · keys 1, 2, 3 set the speed, space pauses`), row);
       return;
     }
     const f = g.forecast();
     const forecast = f.threats
       ? f.threats.map((t) => PROBLEM_LABEL[t] ?? t).join(', ')
-      : `${f.count} problem${f.count === 1 ? '' : 's'} expected (Simulators shows which)`;
+      : `${f.count} problem${f.count === 1 ? '' : 's'} expected${g.level.cards.includes('simulators') ? ' (Simulators shows which)' : ''}`;
     const events = f.events.map((e) => (e.type === 'trip' ? `Power trip at ${e.second}s` : `Senior operator retires at ${e.second}s`));
     const head = el('div', 'title');
     head.innerHTML =
@@ -498,7 +552,9 @@ export async function startGame(parent: HTMLElement): Promise<void> {
       paused = false;
       renderShop();
     });
-    row.append(reroll, go);
+    const guide = el('button', '', 'Guide (G)');
+    guide.addEventListener('click', showGuide);
+    row.append(reroll, go, guide);
     const owned = [...g.owned.entries()].map(([c, n]) => (n > 1 ? `${CARDS[c].name} x${n}` : CARDS[c].name)).join(', ');
     shop.append(head, cards, row);
     if (placing) shop.append(el('div', 'hint', `Click the map to place ${CARDS[placing.card].name}. Esc cancels.`));
@@ -512,18 +568,28 @@ export async function startGame(parent: HTMLElement): Promise<void> {
   }
 
   function reportHtml(r: ShiftReport): string {
+    const g = scene!.game;
     const rows = r.orders
-      .map((o) => `<li>${ITEM_LABEL[o.item] ?? o.item}: ${o.delivered}/${o.perShift} ${o.met ? '✓' : '<span class="warn">missed</span>'}</li>`)
+      .map((o) => `<li>${itemLabel(o.item)}: ${o.delivered}/${o.perShift} ${o.met ? '✓' : '<span class="warn">missed</span>'}</li>`)
       .join('');
+    const n = (k: number, one: string, many: string) => `${k} ${k === 1 ? one : many}`;
     const lines = [
       `Income $${Math.round(r.income)}, repairs $${Math.round(r.repairCost)}, crew wages $${r.wages}`,
-      `${r.detectedEarly} problems caught early, ${r.breakdowns} breakdowns`,
+      `${n(r.detectedEarly, 'problem', 'problems')} spotted early by Cognite, ${n(r.breakdowns, 'machine', 'machines')} seized`,
     ];
+    if (r.predictive) lines.push(`<span class="good">${n(r.predictive, 'worn bearing', 'worn bearings')} replaced before seizing: predictive maintenance</span>`);
     const fixes = Object.entries(r.fixesBy).sort((x, y) => y[1] - x[1]);
-    if (fixes.length) lines.push('Repairs: ' + fixes.map(([name, n]) => `${name} ${n}`).join(', '));
-    if (r.offSpecDelivered) lines.push(`${r.offSpecDelivered} off-spec items shipped and rejected`);
-    if (r.hidden) lines.push(`<span class="warn">${r.hidden} problem${r.hidden === 1 ? ' is' : 's are'} still hidden somewhere in the plant</span>`);
-    return `<ul>${rows}</ul><p>${lines.join('<br>')}</p>`;
+    if (fixes.length) lines.push('Repairs finished: ' + fixes.map(([name, k]) => `${name} ${k}`).join(', '));
+    if (r.offSpecDelivered) lines.push(`<span class="warn">${n(r.offSpecDelivered, 'off-spec item', 'off-spec items')} shipped and rejected</span>`);
+    const known = g.openProblems().filter((p) => p.detected !== null && p.type !== 'false-alarm');
+    if (known.length) lines.push(`<span class="warn">Still open: ${known.map((p) => describe(p)).join(', ')}</span>`);
+    if (r.hidden) lines.push(`<span class="warn">${n(r.hidden, 'problem is', 'problems are')} still hidden somewhere in the plant</span>`);
+    const events = g.feed
+      .filter((e) => e.tick >= r.startTick && e.kind !== 'crew')
+      .slice(-8)
+      .map((e) => `<li class="${e.kind}">${e.text}</li>`)
+      .join('');
+    return `<ul>${rows}</ul><p>${lines.join('<br>')}</p>${events ? `<b>What happened</b><ul class="feed">${events}</ul>` : ''}`;
   }
 
   function afterShift(): void {
@@ -611,6 +677,7 @@ export async function startGame(parent: HTMLElement): Promise<void> {
       inspected = null;
       renderInfo();
     }
+    if ((ev.key === 'g' || ev.key === 'G') && scene && !modal.isConnected) showGuide();
     const speedKey = ['1', '2', '3'].indexOf(ev.key);
     if (speedKey >= 0 && scene?.game.phase === 'shift') {
       speed = SPEEDS[speedKey];

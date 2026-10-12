@@ -1,3 +1,5 @@
+import { PROBLEMS, RULE, RULE_TEXT, spotsText } from './rules';
+
 /** Cognite products (and the plain maintenance crew) the player can buy between shifts. */
 export type CardId =
   | 'crew'
@@ -36,8 +38,8 @@ export const CARDS: Record<CardId, CardDef> = {
     name: 'Maintenance crew',
     price: 70,
     unique: false,
-    text: 'One more crew to fix problems.',
-    helps: 'More crews',
+    text: `Another crew member to walk to spotted problems and fix them. Every crew costs $${RULE.crewPriceStep} more to hire than the last, and each is paid $${RULE.crewWage} per shift.`,
+    helps: 'Fix more at once',
   },
   'data-fusion': {
     id: 'data-fusion',
@@ -45,8 +47,8 @@ export const CARDS: Record<CardId, CardDef> = {
     price: 70,
     placed: { size: 3, radius: 10 },
     unique: false,
-    text: 'Connects everything in range. Operators spot problems on connected equipment twice as fast.',
-    helps: 'Spot sooner',
+    text: `Connects the equipment in range, so its data reaches operators and the other Cognite apps. Operators notice clogged belts and jammed inserters on connected equipment in half the time. Keeps know-how when people leave.`,
+    helps: 'Connect · Spot sooner',
   },
   extractor: {
     id: 'extractor',
@@ -55,8 +57,8 @@ export const CARDS: Record<CardId, CardDef> = {
     placed: { size: 1, radius: 5 },
     unique: false,
     requires: 'data-fusion',
-    text: 'Connects equipment in a small radius. Must be placed in range of a Data Fusion hub.',
-    helps: 'Spot sooner',
+    text: 'Connects equipment in a small radius. Must sit in range of a Data Fusion hub.',
+    helps: 'Connect',
   },
   charts: {
     id: 'charts',
@@ -65,7 +67,7 @@ export const CARDS: Record<CardId, CardDef> = {
     placed: { size: 1, radius: 7 },
     unique: false,
     requires: 'data-fusion',
-    text: 'Threshold alerts on connected equipment: catches wear early, clogs and jams at once, sensor drift in 5 s.',
+    text: `Alerts on live sensor data from connected equipment in range. Spots ${spotsText('charts')}.`,
     helps: 'Spot sooner',
   },
   'asset-data-insights': {
@@ -74,7 +76,7 @@ export const CARDS: Record<CardId, CardDef> = {
     price: 80,
     unique: true,
     requires: 'data-fusion',
-    text: "Crews see a connected machine's full history: wear spotted earlier, repairs 40% faster.",
+    text: `Machine history and condition for connected machines. Spots ${spotsText('asset-data-insights')}. Crews repair connected machines ${RULE_TEXT.pct(1 - RULE.adiRepair)} faster.`,
     helps: 'Spot sooner · Fix faster',
   },
   infield: {
@@ -82,7 +84,7 @@ export const CARDS: Record<CardId, CardDef> = {
     name: 'Cognite InField',
     price: 70,
     unique: true,
-    text: 'Digital checklists: crews move 50% faster and repairs cost 25% less.',
+    text: `Work orders and checklists on the crew's phones: crews walk ${RULE_TEXT.pct(RULE.infieldSpeed - 1)} faster and repairs cost ${RULE_TEXT.pct(1 - RULE.infieldCost)} less.`,
     helps: 'Fix faster',
   },
   inrobot: {
@@ -91,7 +93,7 @@ export const CARDS: Record<CardId, CardDef> = {
     price: 75,
     placed: { size: 2, radius: 8 },
     unique: false,
-    text: 'A robot patrols its area and spots wear, clogs and jams, no connection needed.',
+    text: `A robot inspects everything in its range, connected or not. Spots ${spotsText('inrobot')}.`,
     helps: 'Spot sooner',
   },
   'atlas-ai': {
@@ -100,15 +102,15 @@ export const CARDS: Record<CardId, CardDef> = {
     price: 120,
     unique: true,
     requires: 'data-fusion',
-    text: 'Filters false alarms, sends crews where it matters most, and recalibrates drifting sensors remotely.',
-    helps: 'Smarter crews',
+    text: `An AI agent on your plant data: dismisses false alarms, sends crews to what hurts output most, and recalibrates drifting sensors remotely ${RULE.atlasRecalibrate} s after they are spotted.`,
+    helps: 'Fix what matters',
   },
   canvas: {
     id: 'canvas',
     name: 'Industrial Canvas',
     price: 45,
     unique: false,
-    text: 'Root cause analysis: the most common problem of the last shift happens 40% less from now on.',
+    text: `Root cause analysis: the most common problem of the last shift happens ${RULE_TEXT.pct(1 - RULE.canvasRate)} less often from now on.`,
     helps: 'Prevent',
   },
   maintain: {
@@ -117,7 +119,7 @@ export const CARDS: Record<CardId, CardDef> = {
     price: 90,
     unique: true,
     requires: 'data-fusion',
-    text: 'Planned maintenance before every shift resets wear on connected machines.',
+    text: `Planned maintenance: before every shift, crews service connected machines and any ${PROBLEMS.wear.noun} goes back to zero.`,
     helps: 'Prevent',
   },
   simulators: {
@@ -125,7 +127,7 @@ export const CARDS: Record<CardId, CardDef> = {
     name: 'Simulators',
     price: 60,
     unique: true,
-    text: 'See exactly what the next shift brings, and recover from plant trips twice as fast.',
+    text: `Simulates the next shift: shows exactly which problems are coming, and a rehearsed restart makes plant trips ${RULE_TEXT.pct(1 - RULE.simulatorsTrip)} shorter.`,
     helps: 'Plan ahead',
   },
   search: {
@@ -133,7 +135,7 @@ export const CARDS: Record<CardId, CardDef> = {
     name: 'Cognite Search',
     price: 60,
     unique: true,
-    text: 'Every 20 s, finds the oldest hidden problem anywhere in the plant.',
+    text: `Every ${RULE.searchPeriod} s, finds the oldest hidden problem anywhere in the plant.`,
     helps: 'Spot sooner',
   },
   flows: {
@@ -141,7 +143,7 @@ export const CARDS: Record<CardId, CardDef> = {
     name: 'Cognite Flows',
     price: 75,
     unique: true,
-    text: 'Alerts turn straight into work orders: crews leave at once instead of after 6 s.',
+    text: `Alerts become work orders automatically: crews leave at once instead of after ${RULE.dispatchDelay} s.`,
     helps: 'Dispatch faster',
   },
 };
