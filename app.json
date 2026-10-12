@@ -1,0 +1,16 @@
+{
+  "name": "Factorio Defence",
+  "description": "Tower defence where industrial problems attack your production line and Cognite products fix them.",
+  "externalId": "factorio-defence",
+  "versionTag": "0.0.1",
+  "infra": "appsApi",
+  "deployments": [
+    {
+      "org": "cog-demo",
+      "project": "lervik-industries",
+      "baseUrl": "https://api.cognitedata.com",
+      "deployClientId": "",
+      "deploySecretName": "COG_DEMO_LERVIK_INDUSTRIES_API"
+    }
+  ]
+}
