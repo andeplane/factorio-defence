@@ -283,9 +283,23 @@ export class Game {
     return true;
   }
 
-  private makeOffer(): void {
+  /** Builds a 3-card offer. A reroll skips the guaranteed cards and shows unseen cards first. */
+  private makeOffer(reroll = false): void {
     const pool = ALL_CARDS.filter((c) => this.eligible(c));
     const offer: CardId[] = [];
+    if (reroll) {
+      const unseen = pool.filter((c) => !this.offer.includes(c));
+      while (offer.length < 3 && offer.length < unseen.length) {
+        const c = this.rng.pick(unseen);
+        if (!offer.includes(c)) offer.push(c);
+      }
+      while (offer.length < 3 && offer.length < pool.length) {
+        const c = this.rng.pick(pool);
+        if (!offer.includes(c)) offer.push(c);
+      }
+      this.offer = offer;
+      return;
+    }
     // The first offer always includes Data Fusion, since most products build on it.
     if (!this.has('data-fusion') && pool.includes('data-fusion')) offer.push('data-fusion');
     // A threat or event that is new this round comes with at least one card that answers it.
@@ -316,12 +330,17 @@ export class Game {
     return 10 + 5 * this.rerolls;
   }
 
+  /** A reroll only makes sense when some eligible card isn't already on offer. */
+  canReroll(): boolean {
+    return this.phase === 'build' && ALL_CARDS.some((c) => this.eligible(c) && !this.offer.includes(c));
+  }
+
   reroll(): boolean {
-    if (this.phase !== 'build' || this.money < this.rerollCost()) return false;
+    if (!this.canReroll() || this.money < this.rerollCost()) return false;
     this.money -= this.rerollCost();
     this.rerolls++;
     this.log.push({ type: 'reroll' });
-    this.makeOffer();
+    this.makeOffer(true);
     return true;
   }
 

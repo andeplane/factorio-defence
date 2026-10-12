@@ -87,3 +87,19 @@ describe('game', () => {
     expect(r.detectedEarly).toBe(1);
   });
 });
+
+describe('reroll', () => {
+  it('deals cards not in the current offer, or is unavailable when there are none', () => {
+    for (const level of LEVELS) {
+      const g = new Game(level, 7);
+      g.money = 1000;
+      const before = [...g.offer];
+      if (!g.canReroll()) {
+        expect(g.reroll()).toBe(false);
+        continue;
+      }
+      expect(g.reroll()).toBe(true);
+      expect(g.offer.some((c) => !before.includes(c))).toBe(true);
+    }
+  });
+});

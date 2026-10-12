@@ -394,7 +394,8 @@ export async function startGame(parent: HTMLElement): Promise<void> {
     });
     const row = el('div', 'row');
     const reroll = el('button', '', `New cards ($${g.rerollCost()})`);
-    reroll.disabled = g.money < g.rerollCost();
+    reroll.disabled = g.money < g.rerollCost() || !g.canReroll();
+    if (!g.canReroll()) reroll.title = 'No other cards are available yet';
     reroll.addEventListener('click', () => {
       g.reroll();
       placing = null;
