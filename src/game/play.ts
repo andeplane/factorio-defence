@@ -260,16 +260,26 @@ class LevelScene {
     const px = c.x * TILE_PX;
     const py = c.y * TILE_PX;
     const side = c.size * TILE_PX;
-    g.roundRect(px + 4, py + 4, side - 8, side - 8, 5).fill({ color: 0x3a3d42 }).stroke({ color: 0x1b1b1b, width: 2 });
-    for (let i = 0; i < 4; i++) g.rect(px + 8 + i * ((side - 16) / 4), py + side - 11, (side - 16) / 8, 4).fill({ color: 0xffb300 });
-    g.circle(c.cx * TILE_PX, c.cy * TILE_PX, 4).fill({ color: 0x66bb6a, alpha: 0.5 + 0.5 * Math.sin(time / 300) });
+    // A landing pad: a dark plate with a hazard-striped landing ring and a status light.
+    const mx = c.cx * TILE_PX;
+    const my = c.cy * TILE_PX;
+    g.roundRect(px + 3, py + 3, side - 6, side - 6, 6).fill({ color: 0x34373c }).stroke({ color: 0x1b1b1b, width: 2 });
+    for (let i = 0; i < 8; i++) {
+      const a0 = (i / 8) * Math.PI * 2;
+      const r = side * 0.3;
+      g.moveTo(mx + Math.cos(a0) * r, my + Math.sin(a0) * r)
+        .arc(mx, my, r, a0, a0 + Math.PI / 8)
+        .stroke({ color: 0xffb300, width: 4 });
+    }
+    g.circle(mx, my, 5).fill({ color: 0x66bb6a, alpha: 0.5 + 0.5 * Math.sin(time / 300) });
+    g.circle(mx, my, c.radius * TILE_PX).fill({ color: 0xffb300, alpha: 0.04 });
     const tex = this.engine.assets.animation('icon/construction-robot')?.frames[0];
     let robot = this.robots.get(c.uid);
     if (!robot) {
       robot = new Sprite(tex);
       robot.visible = tex !== undefined;
       robot.anchor.set(0.5);
-      robot.width = robot.height = TILE_PX * 0.9;
+      robot.width = robot.height = TILE_PX * 1.6;
       this.robotLayer.addChild(robot);
       this.robots.set(c.uid, robot);
     }
@@ -278,11 +288,11 @@ class LevelScene {
     const r = Math.min(4, c.radius * 0.5) * (0.75 + 0.25 * Math.sin(time / 2300 + c.uid));
     const gx = (c.cx + Math.cos(a) * r) * TILE_PX;
     const gy = (c.cy + Math.sin(a) * r * 0.8) * TILE_PX;
-    g.ellipse(gx, gy, 9, 4).fill({ color: 0x000000, alpha: 0.3 });
-    const hover = 22 + Math.sin(time / 350) * 3;
+    g.ellipse(gx, gy, 16, 7).fill({ color: 0x000000, alpha: 0.45 });
+    const hover = 34 + Math.sin(time / 350) * 4;
     robot.position.set(gx, gy - hover);
     // Without the Factorio sprites, a simple drone shape.
-    if (!tex) g.ellipse(gx, gy - hover, 9, 6).fill({ color: 0xcfd8dc }).stroke({ color: 0x1b1b1b, width: 2 }).circle(gx, gy - hover, 2.5).fill({ color: 0xffb300 });
+    if (!tex) g.ellipse(gx, gy - hover, 15, 10).fill({ color: 0xcfd8dc }).stroke({ color: 0x1b1b1b, width: 2 }).circle(gx, gy - hover, 4).fill({ color: 0xffb300 });
   }
 
   /** Moves a crew member's character sprite, switching between idle, running and repairing. */
