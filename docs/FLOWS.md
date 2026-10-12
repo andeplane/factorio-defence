@@ -34,7 +34,7 @@ classic files with the same externalIds and directory, and `VITE_CDF_SPRITE_SPAC
 | `npm run deploy:flows` | Uploads changed sprites, builds, deploys a new app version (`versionTag` is set from the time) |
 | `npm run deploy:flows -- --no-upload` | Same without the upload |
 | `npm run upload:cdf` | Only the upload. `-- --dry-run` lists what it would send |
-| `npm run upload:cdf -- --delete-classic` | Deletes classic sprite files left by an earlier classic upload |
+| `npm run upload:cdf -- --delete-classic` | Lists classic sprite files left by an earlier classic upload; add `--yes` to delete them |
 | `npm run dev:flows` | Dev server on https://localhost:3001 that opens the app inside Fusion, reading sprites from CDF |
 | `npm run build:flows` | `dist/` for the Flows app, without `public/` |
 

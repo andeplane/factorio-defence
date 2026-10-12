@@ -13,7 +13,8 @@
  *   --space <space>       data modeling space (default: factorio-defence; the app reads this one)
  *   --classic             classic files instead of a space (then set VITE_CDF_SPRITE_SPACE= empty
  *                         in .env.flows); --data-set <extId> puts them in a data set
- *   --delete-classic      delete classic files left under the prefix by earlier --classic uploads
+ *   --delete-classic      list classic sprite files (prefix + directory, no instanceId) left by
+ *                         earlier classic uploads; add --yes to delete them
  *   --dry-run             list what would be uploaded, without logging in
  * Auth: a browser login to your Cognite org (auth.cognite.com), or a token in CDF_TOKEN.
  * Needs dataModels:write (to create the space), dataModelInstances:write and files:write.
@@ -280,20 +281,29 @@ if (dryRun) process.exit(0);
 token = process.env.CDF_TOKEN ?? (await browserLogin());
 
 if (deleteClassic) {
-  // Only classic files: data modeling files have no classic externalId, so the prefix never matches them.
-  const ids: number[] = [];
+  // Only classic files: the prefix, the sprite directory, and no instanceId (data modeling files are never touched).
+  const files: { id: number; externalId: string }[] = [];
   let cursor: string | undefined;
   do {
-    const page = await cdf<{ items: { id: number; instanceId?: unknown }[]; nextCursor?: string }>('/files/list', {
-      filter: { externalIdPrefix: CDF_ASSET_PREFIX },
-      limit: 1000,
-      ...(cursor ? { cursor } : {}),
-    });
-    ids.push(...page.items.filter((f) => !f.instanceId).map((f) => f.id));
+    const page = await cdf<{ items: { id: number; externalId?: string; directory?: string; instanceId?: unknown }[]; nextCursor?: string }>(
+      '/files/list',
+      { filter: { externalIdPrefix: CDF_ASSET_PREFIX, directoryPrefix: CDF_SPRITE_DIRECTORY }, limit: 1000, ...(cursor ? { cursor } : {}) },
+    );
+    for (const f of page.items) {
+      if (!f.instanceId && f.directory === CDF_SPRITE_DIRECTORY && f.externalId?.startsWith(CDF_ASSET_PREFIX)) {
+        files.push({ id: f.id, externalId: f.externalId });
+      }
+    }
     cursor = page.nextCursor;
   } while (cursor);
-  for (let i = 0; i < ids.length; i += 1000) await cdf('/files/delete', { items: ids.slice(i, i + 1000).map((id) => ({ id })) });
-  console.log(`Deleted ${ids.length} classic files under "${CDF_ASSET_PREFIX}".`);
+  console.log(`${files.length} classic sprite files in ${project} (externalId "${CDF_ASSET_PREFIX}...", directory ${CDF_SPRITE_DIRECTORY}, no instanceId), e.g.:`);
+  for (const f of files.slice(0, 5)) console.log(`  ${f.externalId}`);
+  if (!args.includes('--yes')) {
+    console.log('Nothing deleted. Add --yes to delete them.');
+    process.exit(0);
+  }
+  for (let i = 0; i < files.length; i += 1000) await cdf('/files/delete', { items: files.slice(i, i + 1000).map(({ id }) => ({ id })) });
+  console.log(`Deleted ${files.length} classic sprite files.`);
   process.exit(0);
 }
 
