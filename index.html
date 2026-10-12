@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Factorio Defence</title>
+    <style>
+      html, body { margin: 0; height: 100%; overflow: hidden; background: #1b1b1b; font: 13px/1.4 system-ui, sans-serif; color: #e8e2d0; }
+      #app canvas { display: block; }
+      .panel { position: fixed; background: rgba(40, 38, 34, 0.88); border: 2px solid #121110; box-shadow: inset 0 0 0 1px #57534a; padding: 8px 10px; user-select: none; }
+      #info { top: 10px; left: 10px; white-space: pre; font-family: ui-monospace, monospace; font-size: 12px; pointer-events: none; }
+      #help { top: 10px; right: 10px; max-width: 260px; pointer-events: none; }
+      #hotbar { bottom: 10px; left: 50%; transform: translateX(-50%); display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; max-width: calc(100vw - 40px); }
+      #hotbar button { font: inherit; color: inherit; background: #3e3b35; border: 1px solid #121110; box-shadow: inset 0 1px 0 #6a655a; padding: 6px 10px; cursor: pointer; }
+      #hotbar button.active { background: #c48a1e; color: #1b1b1b; }
+      kbd { font-family: ui-monospace, monospace; opacity: 0.7; }
+      .fatal { position: fixed; inset: 20px; color: #ff8080; white-space: pre-wrap; }
+      body.game #info, body.game #help, body.game #hotbar { display: none; }
+      .ui button { font: inherit; color: inherit; background: #3e3b35; border: 1px solid #121110; box-shadow: inset 0 1px 0 #6a655a; padding: 6px 10px; cursor: pointer; }
+      .ui button:hover:not(:disabled) { background: #4a463f; }
+      .ui button:disabled { opacity: 0.45; cursor: default; }
+      .ui button.primary { background: #c48a1e; color: #1b1b1b; font-weight: 600; }
+      .ui button.active { background: #c48a1e; color: #1b1b1b; }
+      .ui .row { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+      .ui .warn { color: #ff8a65; }
+      .hud { top: 10px; left: 10px; line-height: 1.6; }
+      .hud .strikes { color: #ff8a65; letter-spacing: 2px; }
+      .orders { top: 10px; right: 10px; width: 290px; }
+      .orders .order { display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; margin-top: 6px; }
+      .orders .bar { grid-column: 1 / 3; height: 6px; background: #1b1b1b; }
+      .orders .bar i { display: block; height: 100%; background: #7cb342; }
+      .orders .problems { margin-top: 8px; opacity: 0.8; }
+      .ui .good { color: #aed581; }
+      .ui .dim { opacity: 0.55; }
+      .modal.wide { width: min(760px, calc(100vw - 40px)); max-height: calc(100vh - 60px); overflow-y: auto; box-sizing: border-box; }
+      .modal .rule { margin: 10px 0; padding-top: 8px; border-top: 1px solid #4a463f; font-size: 13px; line-height: 1.45; }
+      .modal .feed { font-size: 12px; padding-left: 18px; }
+      .modal .feed .fixed { color: #aed581; }
+      .modal .feed .wasted, .orders .feed .wasted { color: #bdb6a6; font-style: italic; }
+      .modal .feed .bad, .modal .feed .event { color: #ff8a65; }
+      .orders .feed { list-style: none; margin: 8px 0 0; padding: 6px 0 0; border-top: 1px solid #4a463f; font-size: 12px; }
+      .orders .feed li { margin: 3px 0; opacity: 0.9; }
+      .orders .feed li:first-child { opacity: 1; }
+      .orders .feed .spotted { color: #ffcc80; }
+      .orders .feed .fixed { color: #aed581; }
+      .orders .feed .bad, .orders .feed .event { color: #ff8a65; }
+      .shop .loop { font-size: 12px; opacity: 0.8; margin-bottom: 6px; }
+      .shop .card .helps { font-size: 11px; color: #1b1b1b; background: #9ccc65; border-radius: 3px; padding: 0 5px; }
+      .info { top: 80px; left: 10px; width: 280px; }
+      .info ul { margin: 6px 0; padding-left: 18px; }
+      .info small { opacity: 0.75; }
+      .info .close { float: right; padding: 0 6px; }
+      .shop { bottom: 10px; left: 50%; transform: translateX(-50%); width: min(760px, calc(100vw - 40px)); box-sizing: border-box; }
+      .shop .cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 8px; }
+      .shop .card { display: flex; flex-direction: column; align-items: flex-start; text-align: left; gap: 4px; min-height: 92px; }
+      .shop .card .price { color: #ffcc66; }
+      .shop .card small { opacity: 0.85; }
+      .shop .hint, .shop .owned { margin-top: 6px; opacity: 0.8; }
+      .scrim { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.45); pointer-events: auto; }
+      .modal { background: rgba(40, 38, 34, 0.98); top: 50%; left: 50%; transform: translate(-50%, -50%); width: min(440px, calc(100vw - 40px)); box-sizing: border-box; }
+      .modal h2 { margin: 0 0 6px; font-size: 18px; color: #ffcc66; }
+      .modal ul { padding-left: 18px; }
+      .menu { top: 50%; left: 50%; transform: translate(-50%, -50%); width: min(720px, calc(100vw - 40px)); max-height: calc(100vh - 40px); overflow: auto; box-sizing: border-box; }
+      .menu h1 { margin: 0; color: #ffcc66; font-size: 24px; }
+      .menu .sub { margin: 4px 0 12px; opacity: 0.85; }
+      .menu .levels { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px; }
+      .menu .level { display: flex; flex-direction: column; align-items: flex-start; text-align: left; gap: 4px; }
+      .menu .level .stars { color: #ffcc66; letter-spacing: 2px; }
+      .menu .level small { opacity: 0.8; }
+      .menu .level small.new { color: #ffb74d; opacity: 1; margin-top: 4px; }
+      .flash { top: 70px; left: 50%; transform: translateX(-50%); color: #ff8a65; }
+      #loading { position: fixed; inset: 0; z-index: 10; display: grid; place-items: center; background: #1b1b1b; transition: opacity 0.5s; --progress: 0%; }
+      #loading.done { opacity: 0; pointer-events: none; }
+      #loading .box { width: min(420px, calc(100vw - 40px)); text-align: center; }
+      #loading h1 { margin: 0 0 16px; color: #ffcc66; font-size: 28px; }
+      #loading .bar { height: 14px; background: #121110; border: 2px solid #121110; box-shadow: inset 0 0 0 1px #57534a; }
+      #loading .bar i { display: block; height: 100%; width: var(--progress); background: linear-gradient(#ffcc66, #c48a1e); transition: width 0.15s; }
+      #loading .label { margin-top: 8px; opacity: 0.75; font-size: 12px; }
+      .mainmenu { top: 50%; left: max(20px, 6vw); transform: translateY(-50%); width: min(340px, calc(100vw - 40px)); box-sizing: border-box; display: flex; flex-direction: column; gap: 8px; padding: 18px; background: rgba(40, 38, 34, 0.92); }
+      .mainmenu h1 { margin: 0; color: #ffcc66; font-size: 28px; }
+      .mainmenu .sub { margin: 0 0 8px; opacity: 0.85; }
+      .mainmenu button { font-size: 15px; padding: 10px 14px; text-align: left; }
+      .mainmenu .credit { margin-top: 8px; opacity: 0.55; font-size: 11px; }
+      @media (max-width: 640px) {
+        .orders { top: auto; bottom: 230px; right: 10px; width: 180px; }
+        .orders .feed li:nth-child(n+3) { display: none; }
+        .shop .cards { grid-template-columns: 1fr; }
+        .shop .card { min-height: 0; }
+      }
+    </style>
+    <script type="module" crossorigin src="./assets/index-CVq0U1k8.js"></script>
+  </head>
+  <body>
+    <div id="loading"><div class="box"><h1>Factorio Defence</h1><div class="bar"><i></i></div><div class="label">Loading the game…</div></div></div>
+    <div id="app"></div>
+    <div id="info" class="panel"></div>
+    <div id="help" class="panel">
+      <b>Controls</b><br />
+      WASD / drag: pan · wheel: zoom<br />
+      1-9: pick entity · R: rotate · Q: clear<br />
+      Left click: place · Right click: remove
+    </div>
+    <div id="hotbar" class="panel"></div>
+  </body>
+</html>
