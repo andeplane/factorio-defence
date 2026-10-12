@@ -36,6 +36,7 @@
       .modal .rule { margin: 10px 0; padding-top: 8px; border-top: 1px solid #4a463f; font-size: 13px; line-height: 1.45; }
       .modal .feed { font-size: 12px; padding-left: 18px; }
       .modal .feed .fixed { color: #aed581; }
+      .modal .feed .wasted, .orders .feed .wasted { color: #bdb6a6; font-style: italic; }
       .modal .feed .bad, .modal .feed .event { color: #ff8a65; }
       .orders .feed { list-style: none; margin: 8px 0 0; padding: 6px 0 0; border-top: 1px solid #4a463f; font-size: 12px; }
       .orders .feed li { margin: 3px 0; opacity: 0.9; }
@@ -55,7 +56,8 @@
       .shop .card .price { color: #ffcc66; }
       .shop .card small { opacity: 0.85; }
       .shop .hint, .shop .owned { margin-top: 6px; opacity: 0.8; }
-      .modal { top: 50%; left: 50%; transform: translate(-50%, -50%); width: min(440px, calc(100vw - 40px)); box-sizing: border-box; }
+      .scrim { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.45); pointer-events: auto; }
+      .modal { background: rgba(40, 38, 34, 0.98); top: 50%; left: 50%; transform: translate(-50%, -50%); width: min(440px, calc(100vw - 40px)); box-sizing: border-box; }
       .modal h2 { margin: 0 0 6px; font-size: 18px; color: #ffcc66; }
       .modal ul { padding-left: 18px; }
       .menu { top: 50%; left: 50%; transform: translate(-50%, -50%); width: min(720px, calc(100vw - 40px)); max-height: calc(100vh - 40px); overflow: auto; box-sizing: border-box; }

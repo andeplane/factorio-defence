@@ -5,7 +5,7 @@ export interface FactorySnapshot {
   beltItems: { x: number; y: number; lane: 0 | 1; pos: number; item: string; off: boolean }[];
   inserters: { x: number; y: number; swing: number; held: string | null }[];
   machines: { x: number; y: number; working: boolean }[];
-  problems: { id: number; x: number; y: number; type: string; detected: boolean; severity: number; crewed: boolean }[];
+  problems: { id: number; x: number; y: number; type: string; detected: boolean; severity: number; crew: 'walk' | 'work' | null }[];
   crews: { name: string; x: number; y: number; state: 'idle' | 'walk' | 'work'; job: string | null }[];
   cards: { x: number; y: number; size: number; card: string; radius: number }[];
 }
@@ -34,7 +34,7 @@ export function snapshot(game: Game): FactorySnapshot {
       type: p.type,
       detected: p.detected !== null,
       severity: p.severity,
-      crewed: p.crew !== null,
+      crew: p.crew && p.crew.state !== 'idle' ? p.crew.state : null,
     })),
     crews: game.crews.map((c) => ({ name: c.name, x: c.x, y: c.y, state: c.state, job: c.job?.type ?? null })),
     cards: game.placed.map((p) => ({ x: p.x, y: p.y, size: p.size, card: p.card, radius: p.radius })),

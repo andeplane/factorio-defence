@@ -25,8 +25,13 @@ export interface ProblemRule {
   signal: string;
   /** How a plant without Cognite finds out. */
   unaided: string;
-  /** Operators notice its effects after this many seconds (halved on connected equipment). Null: they never do. */
-  operatorSeconds: number | null;
+  /**
+   * Operators on the floor notice it at this point (wear level for wear, else seconds), without any
+   * Cognite product. Null: they never do.
+   */
+  operatorAt: number | null;
+  /** Data Fusion puts its effects on the operators' screens, so they notice in half the time. */
+  connectedHelpsOperators: boolean;
   /**
    * Cognite products that spot it early. For wear `at` is the wear level (0 to 1); for the rest
    * it is seconds since the problem started.
@@ -41,10 +46,11 @@ export const PROBLEMS: Record<ProblemType, ProblemRule> = {
     name: 'Bearing wear',
     noun: 'bearing wear',
     on: 'furnaces and assemblers',
-    what: 'A motor bearing wears out over 40 to 70 s. Past half way the machine runs at 70% speed; at 100% it seizes and stops.',
+    what: 'A motor bearing wears out over 40 to 70 s. Past 30% wear the machine runs at half speed; at 100% it seizes and stops.',
     signal: 'vibration',
-    unaided: 'Nobody notices until the machine seizes.',
-    operatorSeconds: null,
+    unaided: 'An operator hears the bearing grinding at 90% wear, usually too late to save it.',
+    operatorAt: 0.9,
+    connectedHelpsOperators: false,
     spot: [
       { by: 'charts', at: 0.15 },
       { by: 'asset-data-insights', at: 0.3 },
@@ -59,7 +65,8 @@ export const PROBLEMS: Record<ProblemType, ProblemRule> = {
     what: 'Spilled items block one lane of a belt. Everything behind it backs up.',
     signal: 'belt throughput',
     unaided: 'An operator notices the backed-up belt after 12 s.',
-    operatorSeconds: 12,
+    operatorAt: 12,
+    connectedHelpsOperators: true,
     spot: [
       { by: 'charts', at: 1 },
       { by: 'inrobot', at: 3 },
@@ -73,7 +80,8 @@ export const PROBLEMS: Record<ProblemType, ProblemRule> = {
     what: 'The gripper of an inserter sticks and the arm stops moving items.',
     signal: 'arm cycle count',
     unaided: 'An operator notices the idle arm after 8 s.',
-    operatorSeconds: 8,
+    operatorAt: 8,
+    connectedHelpsOperators: true,
     spot: [
       { by: 'charts', at: 1 },
       { by: 'inrobot', at: 3 },
@@ -86,8 +94,9 @@ export const PROBLEMS: Record<ProblemType, ProblemRule> = {
     on: 'furnaces and assemblers',
     what: 'A temperature sensor drifts, so the machine runs off its setpoint and 40% of what it makes is off-spec. Off-spec goods earn nothing and spoil what is made from them.',
     signal: 'sensor readings against lab quality data',
-    unaided: 'Never seen on the floor. The quality lab reports it at the end of the shift, if it ran for 30 s or more.',
-    operatorSeconds: null,
+    unaided: 'Nothing looks wrong on the floor. After 30 s, rejected goods at the dock lead an operator back to it.',
+    operatorAt: 30,
+    connectedHelpsOperators: false,
     spot: [{ by: 'charts', at: 5 }],
     repair: { seconds: 4, cost: 15 },
   },
@@ -98,7 +107,8 @@ export const PROBLEMS: Record<ProblemType, ProblemRule> = {
     what: 'During an alarm flood, a chattering switch raises alarms on healthy machines.',
     signal: 'alarm history',
     unaided: 'Every alarm is seen at once, and a crew goes out to check each one for nothing.',
-    operatorSeconds: 0,
+    operatorAt: 0,
+    connectedHelpsOperators: false,
     spot: [],
     repair: { seconds: 3, cost: 0 },
   },
@@ -121,7 +131,7 @@ export const RULE = {
   infieldCost: 0.75,
   /** Asset Data Insights: repair time multiplier on connected machines. */
   adiRepair: 0.6,
-  /** Knowledge loss: repair time multiplier, unless Data Fusion is owned. */
+  /** Knowledge loss: repair time multiplier on equipment Data Fusion does not connect. */
   knowledgeLoss: 1.5,
   /** Cognite Search finds the oldest hidden problem this often. */
   searchPeriod: 20,
@@ -133,12 +143,10 @@ export const RULE = {
   /** Industrial Canvas: the root-caused problem type spawns this much as often. */
   canvasRate: 0.6,
   /** Wear slows a machine past this level, to this speed. */
-  wearSlowAt: 0.5,
-  wearSlowSpeed: 0.7,
+  wearSlowAt: 0.3,
+  wearSlowSpeed: 0.5,
   /** Share of off-spec output from a drifting sensor. */
   driftOffSpec: 0.4,
-  /** The quality lab catches drift that ran at least this long. */
-  qualityLabSeconds: 30,
 };
 
 export const SPOTTER_NAME: Record<Spotter, string> = {
@@ -156,8 +164,9 @@ export function spotWhen(type: ProblemType, at: number): string {
 }
 
 /** The sentence on a spotting card listing what it catches, built from PROBLEMS. */
-export function spotsText(by: Spotter): string {
+export function spotsText(by: Spotter, only?: ProblemType[]): string {
   return (Object.keys(PROBLEMS) as ProblemType[])
+    .filter((t) => !only || only.includes(t))
     .flatMap((t) => PROBLEMS[t].spot.filter((s) => s.by === by).map((s) => `${PROBLEMS[t].noun} ${spotWhen(t, s.at)}`))
     .join(', ');
 }

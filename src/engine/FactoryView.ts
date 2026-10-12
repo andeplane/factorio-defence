@@ -11,7 +11,8 @@ import { lanePoint, type Lane } from './beltGeometry';
  */
 export interface FactoryViewState {
   /** Items on belts. `pos` runs 0 to 1 along the tile in the direction of travel. */
-  beltItems: { x: number; y: number; lane: Lane; pos: number; item: string }[];
+  /** `off`: an off-spec item, drawn tinted red. */
+  beltItems: { x: number; y: number; lane: Lane; pos: number; item: string; off?: boolean }[];
   /**
    * Inserter arms. `swing` is 0 with the hand over the pickup tile and 1
    * over the drop tile; `held` is the item in the hand, if any.
@@ -86,6 +87,7 @@ export class FactoryView {
       this.itemSprites[used++] = s;
       s.visible = true;
       setIcon(s, this.icon(it.item));
+      s.tint = it.off ? 0xff5a4a : 0xffffff;
       s.position.set((it.x + 0.5 + ox) * TILE_PX, (it.y + 0.5 + oy) * TILE_PX);
     }
     for (let i = used; i < this.itemSprites.length; i++) this.itemSprites[i].visible = false;

@@ -27,21 +27,21 @@ A threat attaches to a target, has a severity or timer, and is either undetected
 
 | Threat | Target | Effect | Obvious without help |
 | --- | --- | --- | --- |
-| Bearing wear | Furnace, assembler | Severity grows to 1 over 40 to 70 s. Above 0.5 the machine runs at 70%; at 1 it breaks and stops | When it breaks |
-| Clog | Belt lane | Items stop at that point and back up | After 12 s |
-| Inserter jam | Inserter | Stops | After 8 s |
-| Sensor drift | Furnace, assembler | 40% of output is off-spec. Off-spec items earn nothing, and machines fed off-spec make off-spec | Never |
+| Bearing wear | Furnace, assembler | Severity grows to 1 over 40 to 70 s. Above 0.3 the machine runs at 50%; at 1 it seizes and stops | An operator hears it at 0.9 |
+| Clog | Belt lane | Items stop at that point and back up | After 12 s (6 s if connected) |
+| Inserter jam | Inserter | Stops | After 8 s (4 s if connected) |
+| Sensor drift | Furnace, assembler | 40% of output is off-spec (drawn red on belts). Off-spec items earn nothing, and machines fed off-spec make off-spec | After 30 s, through rejects at the dock |
 | Alarm flood | Machines | 4 to 6 false alarms that waste crew time | Instantly (they are alarms) |
-| Plant trip (boss) | Whole plant | All machines stop for 12 s | Instantly |
-| Knowledge loss (boss) | Crews | Repairs take 50% longer for the rest of the level | Instantly |
+| Plant trip (boss) | Whole plant | All machines stop for 12 s; wear pauses meanwhile | Instantly |
+| Knowledge loss (boss) | Crews | Repairs on unconnected equipment take 50% longer for the rest of the level | Instantly |
 
-Each shift has a threat budget that grows with the round number and the number of machines. Threats are bought from the budget by cost and spawn at random times in the first 80% of the shift.
+Each shift has a threat budget that grows with the round number and the number of machines. Threats are bought from the budget by cost and spawn at random times in the first 80% of the shift. A threat type Industrial Canvas has root-caused is then skipped 40% of the time, so the budget is not spent on another threat instead.
 
 ## Crews and repairs
 
-Crews wait at the depot. A detected threat becomes a work order after a dispatch delay (6 s, the time it takes someone to read the alert and raise a work order). The nearest free crew walks to it at 4 tiles/s and repairs it.
+Crews wait at the depot. A detected threat becomes a work order after a dispatch delay (6 s, the time it takes someone to read the alert and raise a work order). Work orders are served first come, first served (Atlas AI: by impact on output); when several crews are free, the nearest one goes. Crews walk at 4 tiles/s and are the only ones who repair.
 
-Repair time and cost depend on how early the threat was caught. A minor fix (wear below 1, a clog, a jam) is quick and cheap. A broken machine takes 5 times longer and costs 6 times more. That gap is the core message: detecting early is cheaper than fixing late.
+Repair time and cost depend on how early the threat was caught. A minor fix (wear below 1, a clog, a jam) is quick and cheap. A seized machine takes 5 times longer and costs 6 times more. That gap is the core message: detecting early is cheaper than fixing late.
 
 ## Cognite cards
 
@@ -50,16 +50,16 @@ Placeable cards cover a radius. Data products need the target to be **connected*
 | Card | Kind | Effect |
 | --- | --- | --- |
 | Maintenance crew | Global | One more crew |
-| Data Fusion | Placed, radius 10 | Connects targets. Operators notice problems on connected targets twice as fast. Cancels knowledge loss |
+| Data Fusion | Placed, radius 10 | Connects targets. Operators notice clogs and jams on connected targets twice as fast. Connected targets ignore knowledge loss |
 | Extractor | Placed, radius 5, must sit inside a hub | Connects targets |
-| Charts | Placed, radius 7 | On connected targets: wear detected at 0.15, clogs and jams after 1 s, sensor drift after 5 s |
+| Charts | Placed, radius 7, must sit where Data Fusion connects | On connected targets: wear detected at 0.15, clogs and jams after 1 s, sensor drift after 5 s |
 | Asset Data Insights | Global | On connected machines: wear detected at 0.3, repairs 40% faster |
 | InField | Global | Crews walk 50% faster and repairs cost 25% less |
-| InRobot | Placed, radius 8 | Detects in radius without a connection: wear at 0.35, clogs and jams after 3 s |
-| Atlas AI agent | Global, needs a hub | False alarms are filtered. Work orders go by impact instead of first come |
-| Industrial Canvas | One-off | Root cause analysis: the most frequent threat type of the last shift spawns 40% less for the rest of the level |
-| Maintain | Global | At the start of each shift, connected machines get planned maintenance: wear reset to 0 |
-| Simulators | Global | Full forecast, and plant trips last half as long |
+| InRobot | Placed, radius 8, needs Data Fusion and must sit where it connects | Inspects everything in its radius, connected or not: wear at 0.35, clogs and jams after 3 s |
+| Atlas AI agent | Global, needs a hub | On connected targets: false alarms are dismissed and drifting sensors recalibrated remotely 5 s after they are spotted. Work orders go by impact instead of first come |
+| Industrial Canvas | One-off | Root cause analysis: the threat type seen most so far (or the likeliest, before any shift) spawns 40% less for the rest of the level |
+| Maintain | Global | At the start of each shift, worn (not seized) bearings on connected machines are replaced for $10 each |
+| Simulators | Global | Forecast of each threat and when it comes, and plant trips last half as long |
 | Search | Global | Every 20 s, finds the oldest undetected threat anywhere |
 | Flows | Global | Work orders go out at once: no dispatch delay |
 
@@ -69,8 +69,8 @@ Level pack 1 has 10 fixed levels with solid items only. Level pack 2 will add oi
 
 | # | Level | Rounds | New in this level |
 | --- | --- | --- | --- |
-| 1 | Gear Works | 6 | Wear, clogs, jams. Iron plates to gears |
-| 2 | Copper Lane | 7 | Copper cable on its own belt |
+| 1 | Gear Works | 6 | Wear and clogs. Iron plates to gears |
+| 2 | Copper Lane | 7 | Copper cable on its own belt, and inserter jams |
 | 3 | Red Science | 8 | Automation science from gears and copper |
 | 4 | Circuit Plant | 8 | Sensor drift. Cable handed straight into circuits |
 | 5 | Control Room | 8 | Alarm floods |
@@ -83,7 +83,7 @@ Level pack 1 has 10 fixed levels with solid items only. Level pack 2 will add oi
 Rules every level follows:
 
 - **Stages.** Each new stage is built at the start of a round. A new stage commissions for 60 s with no threats, so belts and buffers fill before orders count.
-- **Orders** sit at about 75 to 80% of what the line makes with no problems. Unfixed threats are what make you miss them.
+- **Orders** sit at about 60 to 80% of what the line makes with no problems. Unfixed threats are what make you miss them.
 - **Cards unlock** level by level, so the shop teaches one product at a time. The first offer always holds Data Fusion, and an offer always holds an answer to a threat type that is new that round.
 - **Stars.** 3 minus strikes. Best stars are kept in the browser.
 

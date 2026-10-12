@@ -1,4 +1,4 @@
-import { PROBLEMS, RULE, RULE_TEXT, spotsText } from './rules';
+import { PROBLEMS, RULE, RULE_TEXT, spotsText, type ProblemType, type Spotter } from './rules';
 
 /** Cognite products (and the plain maintenance crew) the player can buy between shifts. */
 export type CardId =
@@ -30,6 +30,15 @@ export interface CardDef {
   text: string;
   /** Which step of the repair loop it improves, as a tag on the card. */
   helps: string;
+  /** Spotting cards: whose list of caught problems `cardText` narrows to the level. */
+  spots?: Spotter;
+}
+
+/** The card face for a level: spotting cards list only the problems that level has. */
+export function cardText(def: CardDef, problems: ProblemType[]): string {
+  if (!def.spots) return def.text;
+  const list = spotsText(def.spots, problems);
+  return def.text.replace(spotsText(def.spots), list || 'nothing this level has');
 }
 
 export const CARDS: Record<CardId, CardDef> = {
@@ -47,7 +56,7 @@ export const CARDS: Record<CardId, CardDef> = {
     price: 70,
     placed: { size: 3, radius: 10 },
     unique: false,
-    text: `Connects the equipment in range, so its data reaches operators and the other Cognite apps. Operators notice clogged belts and jammed inserters on connected equipment in half the time. Keeps know-how when people leave.`,
+    text: `Connects the equipment in range, so its data reaches operators and the other Cognite apps. Operators notice ${(Object.values(PROBLEMS) as { noun: string; connectedHelpsOperators: boolean }[]).filter((r) => r.connectedHelpsOperators).map((r) => r.noun.replace(/^an? /, '') + 's').join(' and ')} on connected equipment in ${RULE.connectedOperator === 0.5 ? 'half the time' : RULE_TEXT.pct(RULE.connectedOperator) + ' of the time'}. When an experienced operator retires, connected equipment keeps its history, so repairs there stay at full speed.`,
     helps: 'Connect · Spot sooner',
   },
   extractor: {
@@ -67,7 +76,8 @@ export const CARDS: Record<CardId, CardDef> = {
     placed: { size: 1, radius: 7 },
     unique: false,
     requires: 'data-fusion',
-    text: `Alerts on live sensor data from connected equipment in range. Spots ${spotsText('charts')}.`,
+    text: `Alerts on live sensor data from connected equipment in its range (place it inside a hub's range). Spots ${spotsText('charts')}.`,
+    spots: 'charts',
     helps: 'Spot sooner',
   },
   'asset-data-insights': {
@@ -78,6 +88,7 @@ export const CARDS: Record<CardId, CardDef> = {
     requires: 'data-fusion',
     text: `Machine history and condition for connected machines. Spots ${spotsText('asset-data-insights')}. Crews repair connected machines ${RULE_TEXT.pct(1 - RULE.adiRepair)} faster.`,
     helps: 'Spot sooner · Fix faster',
+    spots: 'asset-data-insights',
   },
   infield: {
     id: 'infield',
@@ -93,7 +104,9 @@ export const CARDS: Record<CardId, CardDef> = {
     price: 75,
     placed: { size: 2, radius: 8 },
     unique: false,
-    text: `A robot inspects everything in its range, connected or not. Spots ${spotsText('inrobot')}.`,
+    requires: 'data-fusion',
+    text: `A robot inspects everything in its range, connected or not, and reports through Data Fusion (place it inside a hub's range). Spots ${spotsText('inrobot')}.`,
+    spots: 'inrobot',
     helps: 'Spot sooner',
   },
   'atlas-ai': {
@@ -110,7 +123,7 @@ export const CARDS: Record<CardId, CardDef> = {
     name: 'Industrial Canvas',
     price: 45,
     unique: false,
-    text: `Root cause analysis: the most common problem of the last shift happens ${RULE_TEXT.pct(1 - RULE.canvasRate)} less often from now on.`,
+    text: `Root cause analysis on the problem you have seen most so far: it happens ${RULE_TEXT.pct(1 - RULE.canvasRate)} less often from the next shift on.`,
     helps: 'Prevent',
   },
   maintain: {
@@ -119,7 +132,7 @@ export const CARDS: Record<CardId, CardDef> = {
     price: 90,
     unique: true,
     requires: 'data-fusion',
-    text: `Planned maintenance: before every shift, crews service connected machines and any ${PROBLEMS.wear.noun} goes back to zero.`,
+    text: `Planned maintenance: before every shift, crews service connected machines, and ${PROBLEMS.wear.noun} that has not yet seized goes back to zero ($${PROBLEMS.wear.repair.cost} per machine).`,
     helps: 'Prevent',
   },
   simulators: {
@@ -127,7 +140,7 @@ export const CARDS: Record<CardId, CardDef> = {
     name: 'Simulators',
     price: 60,
     unique: true,
-    text: `Simulates the next shift: shows exactly which problems are coming, and a rehearsed restart makes plant trips ${RULE_TEXT.pct(1 - RULE.simulatorsTrip)} shorter.`,
+    text: `Simulates the next shift: shows which problems are coming and when, and a rehearsed restart makes plant trips ${RULE_TEXT.pct(1 - RULE.simulatorsTrip)} shorter.`,
     helps: 'Plan ahead',
   },
   search: {

@@ -41,7 +41,7 @@ export const CREW_NAMES = ['Armin', 'Girish', 'Halvard', 'Geir', 'Stein', 'John 
 export interface FeedEntry {
   tick: number;
   text: string;
-  kind: 'spotted' | 'crew' | 'fixed' | 'bad' | 'event';
+  kind: 'spotted' | 'crew' | 'fixed' | 'wasted' | 'bad' | 'event';
 }
 
 /** Who notices a problem, in words. */
@@ -49,7 +49,6 @@ const DETECTED_BY: Record<string, string> = {
   breakdown: 'It broke down',
   operator: 'An operator noticed',
   alarm: 'Alarm',
-  'quality-report': 'The quality lab found',
   charts: 'Charts caught',
   inrobot: 'InRobot spotted',
   'asset-data-insights': 'Asset Data Insights caught',
@@ -65,9 +64,30 @@ export function describe(p: Problem): string {
 
 /** Where a problem is, in words: "the iron gear wheel assembler". */
 export function placeOf(p: Problem): string {
-  if (p.machine) return `the ${p.machine.recipe.result.replace(/-/g, ' ')} ${p.machine.isFurnace ? 'furnace' : 'assembler'}`;
+  if (p.machine) return machineName(p.machine);
   if (p.inserter) return 'an inserter';
   return 'a belt';
+}
+
+/** Numbers for machines that share a name, so "furnace #2" is a specific one. */
+const MACHINE_NO = new WeakMap<Machine, number>();
+
+/** A machine in words: "the iron gear wheel assembler", "the iron plate furnace #3" when there are several. */
+export function machineName(m: Machine): string {
+  const no = MACHINE_NO.get(m);
+  return `the ${m.recipe.result.replace(/-/g, ' ')} ${m.isFurnace ? 'furnace' : 'assembler'}${no ? ` #${no}` : ''}`;
+}
+
+function numberMachines(machines: Machine[]): void {
+  const groups = new Map<string, Machine[]>();
+  for (const m of machines) {
+    const key = `${m.recipe.result}:${m.isFurnace}`;
+    groups.set(key, [...(groups.get(key) ?? []), m]);
+  }
+  for (const list of groups.values()) {
+    list.sort((a, b) => a.y - b.y || a.x - b.x);
+    list.forEach((m, i) => (list.length > 1 ? MACHINE_NO.set(m, i + 1) : MACHINE_NO.delete(m)));
+  }
 }
 
 export interface Crew {
@@ -121,6 +141,8 @@ export interface ShiftReport {
   fixesBy: Record<string, number>;
   /** Worn bearings replaced before they seized. */
   predictive: number;
+  /** Who spotted the problems found this shift: operators, Charts, breakdowns... */
+  spottedBy: Record<string, number>;
   /** Game tick the shift started, to pick its entries out of the feed. */
   startTick: number;
 }
@@ -130,7 +152,7 @@ const COUNTERS: Record<ThreatType | BossEvent['type'], CardId[]> = {
   wear: ['charts', 'asset-data-insights', 'inrobot', 'maintain'],
   clog: ['charts', 'inrobot', 'flows'],
   jam: ['charts', 'inrobot', 'flows'],
-  drift: ['charts', 'search', 'atlas-ai'],
+  drift: ['charts', 'search'],
   flood: ['atlas-ai'],
   trip: ['simulators'],
   'knowledge-loss': ['data-fusion'],
@@ -207,6 +229,7 @@ export class Game {
   private spawned: Partial<Record<ProblemType, number>> = {};
   private detectedEarly = 0;
   private fixesBy: Record<string, number> = {};
+  private spottedBy: Record<string, number> = {};
   private predictive = 0;
   /** What happened this level, newest last, for the in-game feed: spotted, dispatched, fixed, broken. */
   readonly feed: FeedEntry[] = [];
@@ -277,12 +300,17 @@ export class Game {
   }
 
   /** What the player sees about the next shift. Without Simulators only the count is known. */
-  forecast(): { count: number; threats: ThreatType[] | null; events: BossEvent[] } {
+  forecast(): { count: number; threats: { type: ThreatType; second: number }[] | null; events: BossEvent[] } {
     return {
       count: this.plan.length,
-      threats: this.has('simulators') ? this.plan.map((t) => t.type) : null,
+      threats: this.has('simulators') ? this.plan.map((t) => ({ type: t.type, second: Math.round(t.second) })).sort((a, b) => a.second - b.second) : null,
       events: this.events,
     };
+  }
+
+  /** Seconds until power is back after a plant trip, or 0. */
+  tripLeft(): number {
+    return Math.max(0, (this.tripUntil - this.tick) / TICKS_PER_SECOND);
   }
 
   // ---- Build phase -----------------------------------------------------------
@@ -305,6 +333,7 @@ export class Game {
    * (or the plant at the start) is up to speed when the player's shift begins.
    */
   private commission(): void {
+    numberMachines(this.world.machines.filter((m) => this.world.active(m)));
     for (let t = 0; t < COMMISSION_SECONDS * TICKS_PER_SECOND; t++)
       this.world.step(this.rng, () => {}, () => 1, () => 0, () => true);
   }
@@ -386,6 +415,8 @@ export class Game {
     if (!this.world.isFree(x, y, size)) return 'That spot is taken';
     const b = this.world.bounds();
     if (x < b.minX - 4 || y < b.minY - 4 || x + size > b.maxX + 4 || y + size > b.maxY + 4) return 'Too far from the plant';
+    if ((card === 'charts' || card === 'inrobot') && !this.connected(x + size / 2, y + size / 2))
+      return `${def.name} must sit where Data Fusion connects: inside a hub or extractor range`;
     if (card === 'extractor') {
       const c = [x + size / 2, y + size / 2];
       const inHub = this.placed.some((p) => p.card === 'data-fusion' && Math.hypot(p.cx - c[0], p.cy - c[1]) <= p.radius);
@@ -446,6 +477,8 @@ export class Game {
     }
     if (!best) return;
     this.rca.set(best, (this.rca.get(best) ?? 1) * RULE.canvasRate);
+    const name = best === 'flood' ? 'Alarm floods' : PROBLEMS[best].name;
+    this.note('event', `Industrial Canvas: root cause found. ${name} will happen ${Math.round((1 - RULE.canvasRate) * 100)}% less often.`);
     this.makePlan();
   }
 
@@ -458,9 +491,11 @@ export class Game {
     const planRng = new Rng(Math.floor(this.rng.next() * 2 ** 31));
     for (;;) {
       const affordable = types.filter(([t]) => THREAT_COST[t] <= budget + 1e-9);
-      const pick = planRng.weighted(affordable, ([t, v]) => v.weight * (this.rca.get(t) ?? 1));
+      const pick = planRng.weighted(affordable, ([, v]) => v.weight);
       if (!pick) break;
       budget -= THREAT_COST[pick[0]];
+      // A root-caused threat is prevented outright some of the time; its budget is not spent elsewhere.
+      if (planRng.next() >= (this.rca.get(pick[0]) ?? 1)) continue;
       plan.push({ type: pick[0], second: planRng.range(3, this.level.shiftSeconds * 0.8) });
     }
     plan.sort((a, b) => a.second - b.second);
@@ -480,12 +515,16 @@ export class Game {
     this.spawned = {};
     this.detectedEarly = 0;
     this.fixesBy = {};
+    this.spottedBy = {};
     this.predictive = 0;
     this.breakdowns = 0;
     this.nextSearch = this.tick + SEARCH_PERIOD;
     if (this.has('maintain')) {
-      for (const p of this.openProblems())
-        if (p.type === 'wear' && this.connected(p.x, p.y)) this.fix(p, 0);
+      // Planned maintenance replaces worn bearings on connected machines at the early-repair cost.
+      // A seized machine still needs a crew to rebuild it.
+      const worn = this.openProblems().filter((p) => p.type === 'wear' && p.severity < 1 && this.connected(p.x, p.y));
+      for (const p of worn) this.fix(p, PROBLEMS.wear.repair.cost);
+      if (worn.length) this.note('fixed', `Cognite Maintain: planned maintenance replaced ${worn.length} worn bearing${worn.length === 1 ? '' : 's'} before the shift.`);
     }
   }
 
@@ -501,7 +540,7 @@ export class Game {
     for (const t of this.plan) if (t.second >= second && t.second < nextSecond) this.spawn(t.type);
     for (const e of this.events) {
       if (e.second < second || e.second >= nextSecond) continue;
-      this.note('event', e.type === 'trip' ? 'Plant trip! Everything stops until power is restored.' : 'Knowledge loss: an experienced operator retired. Repairs are slower without the data.');
+      this.note('event', e.type === 'trip' ? 'Plant trip! Everything stops until power is restored. Bearings stop wearing while it is down.' : 'Knowledge loss: an experienced operator retired. Repairs on equipment Data Fusion does not connect now take 50% longer.');
       if (e.type === 'trip') this.tripUntil = this.tick + RULE.tripSeconds * (this.has('simulators') ? RULE.simulatorsTrip : 1) * TICKS_PER_SECOND;
       else this.knowledgeLoss = true;
     }
@@ -613,7 +652,7 @@ export class Game {
       const ok = by === 'inrobot' ? this.covered('inrobot', p.x, p.y) : conn && (by === 'charts' ? this.covered('charts', p.x, p.y) : this.has(by));
       if (ok) return by;
     }
-    if (rule.operatorSeconds !== null && age >= rule.operatorSeconds * (conn ? RULE.connectedOperator : 1)) return 'operator';
+    if (rule.operatorAt !== null && progress >= rule.operatorAt * (conn && rule.connectedHelpsOperators ? RULE.connectedOperator : 1)) return 'operator';
     return null;
   }
 
@@ -635,12 +674,14 @@ export class Game {
   private markDetected(p: Problem, by: string): void {
     p.detected = this.tick;
     p.detectedBy = by;
+    if (p.type !== 'false-alarm') this.spottedBy[by] = (this.spottedBy[by] ?? 0) + 1;
     if (p.type === 'false-alarm') this.note('spotted', `Alarm on ${placeOf(p)}. Could be nothing.`);
     else if (by === 'breakdown') this.note('bad', `${placeOf(p).replace(/^./, (c) => c.toUpperCase())} seized: ${PROBLEMS[p.type].noun}.`);
     else this.note('spotted', `${DETECTED_BY[by] ?? by} ${describe(p)}.`);
     p.orderAt = this.tick + (this.has('flows') ? 0 : DISPATCH_DELAY);
-    if (by !== 'breakdown' && by !== 'operator' && by !== 'alarm' && by !== 'quality-report') this.detectedEarly++;
-    if (this.has('atlas-ai')) {
+    if (by !== 'breakdown' && by !== 'operator' && by !== 'alarm') this.detectedEarly++;
+    // Atlas AI works on plant data, so only on connected equipment.
+    if (this.has('atlas-ai') && this.connected(p.x, p.y)) {
       if (p.type === 'false-alarm') {
         this.note('fixed', `Atlas AI dismissed a false alarm on ${placeOf(p)}.`);
         this.fix(p, 0);
@@ -655,7 +696,7 @@ export class Game {
     let oldestHidden: Problem | null = null;
     for (const p of this.problems) {
       if (p.fixed) continue;
-      if (p.type === 'wear' && p.severity < 1 && p.crew?.state !== 'work') {
+      if (p.type === 'wear' && p.severity < 1 && p.crew?.state !== 'work' && this.tick >= this.tripUntil) {
         p.severity = Math.min(1, p.severity + p.growth);
         if (p.severity >= 1) {
           this.breakdowns++;
@@ -739,13 +780,13 @@ export class Game {
         const r = repairOf(p);
         let seconds = r.seconds;
         if (p.machine && this.has('asset-data-insights') && this.connected(p.x, p.y)) seconds *= RULE.adiRepair;
-        if (this.knowledgeLoss && !this.has('data-fusion')) seconds *= RULE.knowledgeLoss;
+        if (this.knowledgeLoss && !this.connected(p.x, p.y)) seconds *= RULE.knowledgeLoss;
         c.workLeft = Math.round(seconds * TICKS_PER_SECOND);
         c.workCost = r.cost * (this.has('infield') ? RULE.infieldCost : 1);
         c.state = 'work';
       }
       if (c.state === 'work' && --c.workLeft <= 0) {
-        this.note('fixed', this.fixText(c, p));
+        this.note(p.type === 'false-alarm' ? 'wasted' : 'fixed', this.fixText(c, p));
         if (p.type === 'wear' && p.severity < 1) this.predictive++;
         this.fixesBy[c.name] = (this.fixesBy[c.name] ?? 0) + 1;
         this.fix(p, c.workCost);
@@ -756,10 +797,6 @@ export class Game {
   private endShift(): void {
     const wages = CREW_WAGE * this.crews.length;
     this.money -= wages;
-    // The quality lab finds drifting sensors from the shift's off-spec output, too late to save it.
-    for (const p of this.problems)
-      if (p.type === 'drift' && !p.fixed && p.detected === null && this.tick - p.start >= RULE.qualityLabSeconds * TICKS_PER_SECOND)
-        this.markDetected(p, 'quality-report');
     const orders: OrderResult[] = this.orders.map((o) => {
       const delivered = this.deliveredThisShift(o.item);
       return { ...o, delivered, met: delivered >= o.perShift };
@@ -778,6 +815,7 @@ export class Game {
       offSpecDelivered: offSpec,
       hidden: this.openProblems().filter((p) => p.detected === null).length,
       fixesBy: this.fixesBy,
+      spottedBy: this.spottedBy,
       predictive: this.predictive,
       startTick: this.tick - this.shiftTick,
     });
