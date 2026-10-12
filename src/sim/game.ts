@@ -37,6 +37,45 @@ export interface Problem {
 /** Crews are named after people at Cognite, hired in this order. */
 export const CREW_NAMES = ['Armin', 'Girish', 'Halvard', 'Geir', 'Stein', 'John Markus'];
 
+export interface FeedEntry {
+  tick: number;
+  text: string;
+  kind: 'spotted' | 'crew' | 'fixed' | 'bad' | 'event';
+}
+
+/** Who notices a problem, in words. */
+const DETECTED_BY: Record<string, string> = {
+  breakdown: 'It broke down',
+  operator: 'An operator noticed',
+  alarm: 'Alarm',
+  'quality-report': 'The quality lab found',
+  charts: 'Charts caught',
+  inrobot: 'InRobot spotted',
+  'asset-data-insights': 'Asset Data Insights caught',
+  search: 'Search found',
+  'atlas-ai': 'Atlas AI flagged',
+};
+
+export const PROBLEM_NAME: Record<ProblemType, string> = {
+  wear: 'bearing wear',
+  clog: 'a clogged belt',
+  jam: 'a jammed inserter',
+  drift: 'sensor drift',
+  'false-alarm': 'a false alarm',
+};
+
+/** A problem in words: "bearing wear on the iron gear wheel assembler", "a clogged belt". */
+export function describe(p: Problem): string {
+  return p.machine ? `${PROBLEM_NAME[p.type]} on ${placeOf(p)}` : PROBLEM_NAME[p.type];
+}
+
+/** Where a problem is, in words: "the iron gear wheel assembler". */
+export function placeOf(p: Problem): string {
+  if (p.machine) return `the ${p.machine.recipe.result.replace(/-/g, ' ')} ${p.machine.isFurnace ? 'furnace' : 'assembler'}`;
+  if (p.inserter) return 'an inserter';
+  return 'a belt';
+}
+
 export interface Crew {
   id: number;
   name: string;
@@ -181,6 +220,8 @@ export class Game {
   private spawned: Partial<Record<ProblemType, number>> = {};
   private detectedEarly = 0;
   private fixesBy: Record<string, number> = {};
+  /** What happened this level, newest last, for the in-game feed: spotted, dispatched, fixed, broken. */
+  readonly feed: FeedEntry[] = [];
   private breakdowns = 0;
   private wear = new Map<Machine, Problem>();
   private drift = new Map<Machine, Problem>();
@@ -471,6 +512,7 @@ export class Game {
     for (const t of this.plan) if (t.second >= second && t.second < nextSecond) this.spawn(t.type);
     for (const e of this.events) {
       if (e.second < second || e.second >= nextSecond) continue;
+      this.note('event', e.type === 'trip' ? 'Plant trip! Everything stops until power is restored.' : 'Knowledge loss: an experienced operator retired. Repairs are slower without the data.');
       if (e.type === 'trip') this.tripUntil = this.tick + TRIP_SECONDS * (this.has('simulators') ? 0.5 : 1) * TICKS_PER_SECOND;
       else this.knowledgeLoss = true;
     }
@@ -594,13 +636,24 @@ export class Game {
     }
   }
 
+  private note(kind: FeedEntry['kind'], text: string): void {
+    this.feed.push({ tick: this.tick, text, kind });
+    if (this.feed.length > 200) this.feed.splice(0, 100);
+  }
+
   private markDetected(p: Problem, by: string): void {
     p.detected = this.tick;
     p.detectedBy = by;
+    if (p.type === 'false-alarm') this.note('spotted', `Alarm on ${placeOf(p)}. Could be nothing.`);
+    else if (by === 'breakdown') this.note('bad', `${placeOf(p).replace(/^./, (c) => c.toUpperCase())} broke down: ${PROBLEM_NAME[p.type]}.`);
+    else this.note('spotted', `${DETECTED_BY[by] ?? by} ${describe(p)}.`);
     p.orderAt = this.tick + (this.has('flows') ? 0 : DISPATCH_DELAY);
     if (by !== 'breakdown' && by !== 'operator' && by !== 'alarm' && by !== 'quality-report') this.detectedEarly++;
     if (this.has('atlas-ai')) {
-      if (p.type === 'false-alarm') this.fix(p, 0);
+      if (p.type === 'false-alarm') {
+        this.note('fixed', `Atlas AI dismissed a false alarm on ${placeOf(p)}.`);
+        this.fix(p, 0);
+      }
       else if (p.type === 'drift') p.remoteFixAt = this.tick + 5 * TICKS_PER_SECOND;
     }
   }
@@ -613,9 +666,13 @@ export class Game {
       if (p.fixed) continue;
       if (p.type === 'wear' && p.severity < 1 && p.crew?.state !== 'work') {
         p.severity = Math.min(1, p.severity + p.growth);
-        if (p.severity >= 1) this.breakdowns++;
+        if (p.severity >= 1) {
+          this.breakdowns++;
+          if (p.detected !== null) this.note('bad', `${placeOf(p).replace(/^./, (c) => c.toUpperCase())} broke down. The repair now takes much longer.`);
+        }
       }
       if (p.remoteFixAt !== null && this.tick >= p.remoteFixAt) {
+        this.note('fixed', `Atlas AI recalibrated the drifting sensor on ${placeOf(p)} remotely.`);
         this.fix(p, 5);
         continue;
       }
@@ -674,6 +731,7 @@ export class Game {
         c.job = job;
         job.crew = c;
         c.state = 'walk';
+        this.note('crew', `${c.name} is heading to ${describe(job)}.`);
       }
       const p = c.job!;
       if (c.state === 'walk') {
@@ -696,6 +754,7 @@ export class Game {
         c.state = 'work';
       }
       if (c.state === 'work' && --c.workLeft <= 0) {
+        this.note('fixed', p.type === 'false-alarm' ? `${c.name} checked the alarm: nothing wrong.` : `${c.name} fixed ${describe(p)}.`);
         this.fixesBy[c.name] = (this.fixesBy[c.name] ?? 0) + 1;
         this.fix(p, c.workCost);
       }

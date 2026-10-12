@@ -26,6 +26,8 @@ export interface CardDef {
   requires?: CardId;
   /** One line for the card face. */
   text: string;
+  /** Which step of the repair loop it improves, as a tag on the card. */
+  helps: string;
 }
 
 export const CARDS: Record<CardId, CardDef> = {
@@ -35,6 +37,7 @@ export const CARDS: Record<CardId, CardDef> = {
     price: 70,
     unique: false,
     text: 'One more crew to fix problems.',
+    helps: 'More crews',
   },
   'data-fusion': {
     id: 'data-fusion',
@@ -43,6 +46,7 @@ export const CARDS: Record<CardId, CardDef> = {
     placed: { size: 3, radius: 10 },
     unique: false,
     text: 'Connects everything in range. Operators spot problems on connected equipment twice as fast.',
+    helps: 'Spot sooner',
   },
   extractor: {
     id: 'extractor',
@@ -52,6 +56,7 @@ export const CARDS: Record<CardId, CardDef> = {
     unique: false,
     requires: 'data-fusion',
     text: 'Connects equipment in a small radius. Must be placed in range of a Data Fusion hub.',
+    helps: 'Spot sooner',
   },
   charts: {
     id: 'charts',
@@ -61,6 +66,7 @@ export const CARDS: Record<CardId, CardDef> = {
     unique: false,
     requires: 'data-fusion',
     text: 'Threshold alerts on connected equipment: catches wear early, clogs and jams at once, sensor drift in 5 s.',
+    helps: 'Spot sooner',
   },
   'asset-data-insights': {
     id: 'asset-data-insights',
@@ -69,6 +75,7 @@ export const CARDS: Record<CardId, CardDef> = {
     unique: true,
     requires: 'data-fusion',
     text: "Crews see a connected machine's full history: wear spotted earlier, repairs 40% faster.",
+    helps: 'Spot sooner · Fix faster',
   },
   infield: {
     id: 'infield',
@@ -76,6 +83,7 @@ export const CARDS: Record<CardId, CardDef> = {
     price: 70,
     unique: true,
     text: 'Digital checklists: crews move 50% faster and repairs cost 25% less.',
+    helps: 'Fix faster',
   },
   inrobot: {
     id: 'inrobot',
@@ -84,6 +92,7 @@ export const CARDS: Record<CardId, CardDef> = {
     placed: { size: 2, radius: 8 },
     unique: false,
     text: 'A robot patrols its area and spots wear, clogs and jams, no connection needed.',
+    helps: 'Spot sooner',
   },
   'atlas-ai': {
     id: 'atlas-ai',
@@ -92,6 +101,7 @@ export const CARDS: Record<CardId, CardDef> = {
     unique: true,
     requires: 'data-fusion',
     text: 'Filters false alarms, sends crews where it matters most, and recalibrates drifting sensors remotely.',
+    helps: 'Smarter crews',
   },
   canvas: {
     id: 'canvas',
@@ -99,6 +109,7 @@ export const CARDS: Record<CardId, CardDef> = {
     price: 45,
     unique: false,
     text: 'Root cause analysis: the most common problem of the last shift happens 40% less from now on.',
+    helps: 'Prevent',
   },
   maintain: {
     id: 'maintain',
@@ -107,6 +118,7 @@ export const CARDS: Record<CardId, CardDef> = {
     unique: true,
     requires: 'data-fusion',
     text: 'Planned maintenance before every shift resets wear on connected machines.',
+    helps: 'Prevent',
   },
   simulators: {
     id: 'simulators',
@@ -114,6 +126,7 @@ export const CARDS: Record<CardId, CardDef> = {
     price: 60,
     unique: true,
     text: 'See exactly what the next shift brings, and recover from plant trips twice as fast.',
+    helps: 'Plan ahead',
   },
   search: {
     id: 'search',
@@ -121,6 +134,7 @@ export const CARDS: Record<CardId, CardDef> = {
     price: 60,
     unique: true,
     text: 'Every 20 s, finds the oldest hidden problem anywhere in the plant.',
+    helps: 'Spot sooner',
   },
   flows: {
     id: 'flows',
@@ -128,6 +142,7 @@ export const CARDS: Record<CardId, CardDef> = {
     price: 75,
     unique: true,
     text: 'Alerts turn straight into work orders: crews leave at once instead of after 6 s.',
+    helps: 'Dispatch faster',
   },
 };
 

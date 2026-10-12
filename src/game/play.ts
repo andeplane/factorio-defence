@@ -52,6 +52,9 @@ const ITEM_LABEL: Record<string, string> = {
   'transport-belt': 'Transport belts',
 };
 
+/** Problem names short enough for a label on the map. */
+const SHORT_PROBLEM: Record<string, string> = { wear: 'Wear', clog: 'Clog', jam: 'Jam', drift: 'Sensor drift', 'false-alarm': 'Alarm?' };
+
 /** Shift speeds, also on keys 1, 2 and 3. */
 const SPEEDS = [1, 2, 4];
 
@@ -170,6 +173,8 @@ class LevelScene {
       const color = p.type === 'false-alarm' ? 0xffd54f : p.type === 'wear' && p.severity >= 1 ? 0xff1744 : 0xff7043;
       g.circle(x, y - 10, 11).fill({ color, alpha: pulse }).stroke({ color: 0x1b1b1b, width: 2 });
       this.label('!', p.x, p.y - 10 / TILE_PX, 0x1b1b1b, 15);
+      const name = p.type === 'wear' ? (p.severity >= 1 ? 'BROKEN' : `Wear ${Math.round(p.severity * 100)}%`) : SHORT_PROBLEM[p.type];
+      this.label(name + (p.crewed ? ' · crew coming' : ''), p.x, p.y - 30 / TILE_PX, 0xffffff, 12, true);
       if (p.type === 'wear' && p.severity < 1) {
         g.rect(x - 16, y + 6, 32, 5).fill({ color: 0x1b1b1b });
         g.rect(x - 16, y + 6, 32 * p.severity, 5).fill({ color: 0xff7043 });
@@ -180,12 +185,14 @@ class LevelScene {
       const y = c.y * TILE_PX;
       if (c.state === 'work') g.circle(x, y, 10 + 4 * pulse).stroke({ color: 0xffa726, width: 2, alpha: 0.8 });
       g.circle(x, y, 7).fill({ color: 0xffa726 }).stroke({ color: 0x1b1b1b, width: 2 });
-      this.label(c.name, c.x, c.y + 20 / TILE_PX, 0xfff3e0, 13);
+      const doing = c.state === 'idle' ? 'waiting for a work order' : `${c.state === 'walk' ? 'going to' : 'fixing'} ${SHORT_PROBLEM[c.job!].toLowerCase()}`;
+      this.label(`${c.name} · ${doing}`, c.x, c.y + 20 / TILE_PX, 0xfff3e0, 12, true);
     }
   }
 
-  private label(text: string, x: number, y: number, color: number, size: number): void {
-    const t = new Text({ text, style: { fill: color, fontSize: size, fontWeight: 'bold', fontFamily: 'system-ui, sans-serif' } });
+  private label(text: string, x: number, y: number, color: number, size: number, outline = false): void {
+    const style = { fill: color, fontSize: size, fontWeight: 'bold' as const, fontFamily: 'system-ui, sans-serif', ...(outline ? { stroke: { color: 0x1b1b1b, width: 3 } } : {}) };
+    const t = new Text({ text, style });
     t.anchor.set(0.5);
     t.position.set(x * TILE_PX, y * TILE_PX);
     this.labels.addChild(t);
@@ -344,9 +351,15 @@ export async function startGame(parent: HTMLElement): Promise<void> {
     const open = g.openProblems();
     const known = open.filter((p) => p.detected !== null && p.type !== 'false-alarm').length;
     const alarms = open.filter((p) => p.type === 'false-alarm').length;
+    const feed = g.feed
+      .slice(-5)
+      .reverse()
+      .map((e) => `<li class="${e.kind}">${e.text}</li>`)
+      .join('');
     orders.innerHTML =
       `<b>Order per shift</b>${rows}` +
-      `<div class="problems">Known problems: ${known}${alarms ? ` · alarms: ${alarms}` : ''}</div>`;
+      `<div class="problems">Known problems: ${known}${alarms ? ` · alarms: ${alarms}` : ''}</div>` +
+      (feed ? `<ul class="feed">${feed}</ul>` : '');
     renderInfo();
   }
 
@@ -443,14 +456,17 @@ export async function startGame(parent: HTMLElement): Promise<void> {
       : `${f.count} problem${f.count === 1 ? '' : 's'} expected (Simulators shows which)`;
     const events = f.events.map((e) => (e.type === 'trip' ? `Power trip at ${e.second}s` : `Senior operator retires at ${e.second}s`));
     const head = el('div', 'title');
-    head.innerHTML = `<b>Next shift</b>: ${forecast}${events.length ? `<br><span class="warn">${events.join(' · ')}</span>` : ''}`;
+    head.innerHTML =
+      `<div class="loop">A problem gets fixed only after someone <b>spots</b> it. Then a crew is <b>dispatched</b>, walks there and <b>fixes</b> it. ` +
+      `Caught early it is quick and cheap; once a machine breaks it is slow and costly. Cognite helps at each step.</div>` +
+      `<b>Next shift</b>: ${forecast}${events.length ? `<br><span class="warn">${events.join(' · ')}</span>` : ''}`;
     const cards = el('div', 'cards');
     g.offer.forEach((id, i) => {
       const def = CARDS[id];
       const c = el('button', 'card');
       const price = g.priceOf(id);
       c.disabled = g.money < price;
-      c.append(el('b', '', def.name), el('span', 'price', `$${price}`), el('small', '', def.text));
+      c.append(el('b', '', def.name), el('span', 'price', `$${price}`), el('span', 'helps', def.helps), el('small', '', def.text));
       c.addEventListener('click', () => {
         if (def.placed) {
           placing = { index: i, card: id };
