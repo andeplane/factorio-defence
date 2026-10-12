@@ -36,7 +36,10 @@ export interface Problem {
 }
 
 /** Crews are named after people at Cognite, hired in this order. */
-export const CREW_NAMES = ['Anders', 'Kristoffer', 'Lars', 'Shehan', 'Niek', 'Stein', 'Geir', 'John Markus', 'Petteri', 'Halvard'];
+export const CREW_NAMES = [
+  'Anders', 'Kristoffer', 'Lars', 'Shehan', 'Niek', 'Stein', 'Geir', 'John Markus', 'Petteri',
+  'Halvard', 'Daniel', 'Andreas', 'Erik', 'Fredrik', 'Mayur', 'Christian', 'Kelvin', 'Knut',
+];
 
 export interface FeedEntry {
   tick: number;
@@ -230,6 +233,8 @@ export class Game {
   private detectedEarly = 0;
   private fixesBy: Record<string, number> = {};
   private spottedBy: Record<string, number> = {};
+  /** CREW_NAMES in this game's hiring order. */
+  private readonly crewNames: string[];
   private predictive = 0;
   /** What happened this level, newest last, for the in-game feed: spotted, dispatched, fixed, broken. */
   readonly feed: FeedEntry[] = [];
@@ -243,6 +248,13 @@ export class Game {
     readonly seed: number,
   ) {
     this.rng = new Rng(seed);
+    // Crews are hired in a shuffled order. A separate stream keeps the sim's own randomness unchanged.
+    const nameRng = new Rng(seed ^ 0x5eed);
+    this.crewNames = [...CREW_NAMES];
+    for (let i = this.crewNames.length - 1; i > 0; i--) {
+      const j = Math.floor(nameRng.next() * (i + 1));
+      [this.crewNames[i], this.crewNames[j]] = [this.crewNames[j], this.crewNames[i]];
+    }
     level.build(this.world);
     this.world.finish();
     this.money = level.startMoney;
@@ -455,7 +467,8 @@ export class Game {
   private addCrew(): void {
     const [x, y] = this.level.depot;
     const n = this.crews.length;
-    const name = CREW_NAMES[n % CREW_NAMES.length] + (n >= CREW_NAMES.length ? ` ${Math.floor(n / CREW_NAMES.length) + 1}` : '');
+    const names = this.crewNames;
+    const name = names[n % names.length] + (n >= names.length ? ` ${Math.floor(n / names.length) + 1}` : '');
     this.crews.push({ id: this.nextId++, name, x, y, job: null, state: 'idle', workLeft: 0, workCost: 0 });
   }
 

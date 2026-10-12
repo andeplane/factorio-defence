@@ -112,8 +112,16 @@ const CREW_ANIMS: CrewAnim[] = ['idle', 'running', 'mining_with_tool'];
 /** Where each crew member stands relative to its sim position, in tiles, so no two overlap. */
 const CREW_OFFSETS: [number, number][] = [[0, 0], [0.9, 0.3], [-0.9, 0.3], [0.5, -0.8], [-0.5, -0.8], [0, 1], [1.4, -0.5], [-1.4, -0.5], [1.3, 1.1], [-1.3, 1.1]];
 
-/** One player colour per crew member, in hiring order. */
-const CREW_COLORS = [0xff9800, 0x42a5f5, 0x66bb6a, 0xab47bc, 0xef5350, 0xffee58, 0x26c6da, 0xec407a, 0x8d6e63, 0xeceff1];
+/** One player colour per crew member, in hiring order: hues a golden angle apart, so neighbours differ. */
+const CREW_COLORS = Array.from({ length: 18 }, (_, i) => hsl((30 + i * 137.508) % 360, i % 2 ? 0.55 : 0.75, i % 3 === 2 ? 0.45 : 0.58));
+
+function hsl(h: number, s: number, l: number): number {
+  const f = (n: number) => {
+    const k = (n + h / 30) % 12;
+    return Math.round(255 * (l - s * Math.min(l, 1 - l) * Math.max(-1, Math.min(k - 3, 9 - k, 1))));
+  };
+  return (f(0) << 16) | (f(8) << 8) | f(4);
+}
 
 class LevelScene {
   readonly game: Game;
