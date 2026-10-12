@@ -52,6 +52,9 @@ const ITEM_LABEL: Record<string, string> = {
   'transport-belt': 'Transport belts',
 };
 
+/** Shift speeds, also on keys 1, 2 and 3. */
+const SPEEDS = [1, 2, 4];
+
 const itemLabel = (item: string) => ITEM_LABEL[item] ?? item.replace(/-/g, ' ').replace(/^./, (c) => c.toUpperCase());
 
 const PROBLEM_LABEL: Record<string, string> = {
@@ -416,7 +419,7 @@ export async function startGame(parent: HTMLElement): Promise<void> {
     shop.replaceChildren();
     if (g.phase !== 'build') {
       const row = el('div', 'row');
-      for (const s of [1, 2, 4]) {
+      for (const s of SPEEDS) {
         const b = el('button', speed === s && !paused ? 'active' : '', `${s}x`);
         b.addEventListener('click', () => {
           speed = s;
@@ -431,7 +434,7 @@ export async function startGame(parent: HTMLElement): Promise<void> {
         renderShop();
       });
       row.appendChild(p);
-      shop.append(el('div', 'title', 'Shift running'), row);
+      shop.append(el('div', 'title', 'Shift running · keys 1, 2, 3 set the speed, space pauses'), row);
       return;
     }
     const f = g.forecast();
@@ -591,6 +594,12 @@ export async function startGame(parent: HTMLElement): Promise<void> {
     } else if (ev.key === 'Escape' && inspected) {
       inspected = null;
       renderInfo();
+    }
+    const speedKey = ['1', '2', '3'].indexOf(ev.key);
+    if (speedKey >= 0 && scene?.game.phase === 'shift') {
+      speed = SPEEDS[speedKey];
+      paused = false;
+      renderShop();
     }
     if (ev.key === ' ' && scene?.game.phase === 'shift') {
       paused = !paused;
