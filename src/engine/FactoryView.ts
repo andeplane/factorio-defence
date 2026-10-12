@@ -27,6 +27,12 @@ export const EMPTY_FACTORY_STATE: FactoryViewState = { beltItems: [], inserters:
 export const ITEM_PX = 14;
 /** Distance from an inserter's centre to its hand over the pickup/drop tile, in tiles. */
 export const INSERTER_REACH = 1;
+/** Heights (screen-up offsets, in tiles) of the arm's pivot, elbow and hand. */
+const PIVOT_HEIGHT = 0.2;
+const ELBOW_HEIGHT = 0.35;
+const HAND_HEIGHT = 0.1;
+/** How far the claw reaches past the hand point, as a fraction of the forearm. */
+const CLAW_OVERHANG = 0.12;
 
 const VEC: Record<Direction, [number, number]> = { north: [0, -1], east: [1, 0], south: [0, 1], west: [-1, 0] };
 
@@ -98,16 +104,17 @@ export class FactoryView {
       const cx = (e.x + 0.5) * TILE_PX;
       const cy = (e.y + 0.5) * TILE_PX;
       const hx = cx + Math.cos(angle) * INSERTER_REACH * TILE_PX;
-      const hy = cy + Math.sin(angle) * INSERTER_REACH * TILE_PX;
-      // Sprites are drawn pointing down (+y), so rotate +y onto the arm's direction.
-      const rot = angle - Math.PI / 2;
-      arm.base.position.set(cx, cy);
-      arm.base.rotation = rot;
-      arm.base.height = INSERTER_REACH * TILE_PX;
+      const hy = cy + Math.sin(angle) * INSERTER_REACH * TILE_PX - HAND_HEIGHT * TILE_PX;
+      // Two segments as in Factorio: the upper arm from the raised pivot to a
+      // raised elbow halfway out, then the forearm down to the hand.
+      const sx = cx;
+      const sy = cy - PIVOT_HEIGHT * TILE_PX;
+      const ex = (cx + hx) / 2;
+      const ey = (cy + hy) / 2 - ELBOW_HEIGHT * TILE_PX;
+      placeSegment(arm.base, sx, sy, ex, ey, 0);
       const hand = this.anim(ins.held ? 'inserter/hand_closed' : 'inserter/hand_open');
       if (hand) arm.hand.texture = hand.frames[0];
-      arm.hand.position.set(hx, hy);
-      arm.hand.rotation = rot;
+      placeSegment(arm.hand, ex, ey, hx, hy, CLAW_OVERHANG);
       arm.item.visible = ins.held !== null;
       if (ins.held) {
         setIcon(arm.item, this.icon(ins.held));
@@ -126,11 +133,11 @@ export class FactoryView {
 
   private newArm(id: number): ArmSprites {
     const base = new Sprite(this.anim('inserter/hand_base')?.frames[0] ?? Texture.EMPTY);
-    base.anchor.set(0.5, 0);
+    base.anchor.set(0.5, 1);
     base.scale.x = this.anim('inserter/hand_base')?.def.scale ?? 1;
     const hand = new Sprite(this.anim('inserter/hand_open')?.frames[0] ?? Texture.EMPTY);
-    hand.anchor.set(0.5, 0.3);
-    hand.scale.set(this.anim('inserter/hand_open')?.def.scale ?? 1);
+    hand.anchor.set(0.5, 1);
+    hand.scale.x = this.anim('inserter/hand_open')?.def.scale ?? 1;
     this.armLayer.addChild(base, hand);
     const item = this.newItemSprite(this.armLayer);
     const arm = { base, hand, item };
@@ -164,6 +171,20 @@ export class FactoryView {
 /** Animation keys the view may draw, for preloading. */
 export function factoryViewKeys(items: string[]): string[] {
   return ['inserter/hand_base', 'inserter/hand_open', 'inserter/hand_closed', ...items.map((i) => `icon/${i}`)];
+}
+
+/**
+ * Stretches an arm sprite (anchored at its bottom centre, pointing up like
+ * Factorio's hand sprites) from (x0, y0) to (x1, y1), plus `overhang` of its
+ * length beyond the end.
+ */
+function placeSegment(s: Sprite, x0: number, y0: number, x1: number, y1: number, overhang: number): void {
+  const dx = x1 - x0;
+  const dy = y1 - y0;
+  s.position.set(x0, y0);
+  // Rotate the sprite's up (-y) onto the segment.
+  s.rotation = Math.atan2(dy, dx) + Math.PI / 2;
+  s.height = Math.max(2, Math.hypot(dx, dy) * (1 + overhang));
 }
 
 function setIcon(s: Sprite, tex: Texture): void {

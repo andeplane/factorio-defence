@@ -471,25 +471,28 @@ function inserterHandBase(): PlaceholderAnimation {
   return { canvas, def: { file: 'placeholder', width: 8, height: PX } };
 }
 
-/** Claw, drawn pointing down (away from the inserter). */
+/**
+ * Forearm and claw, laid out like Factorio's hand sprites: the claw is at
+ * the top and the forearm runs down to the elbow.
+ */
 function inserterHand(open: boolean): PlaceholderAnimation {
-  const canvas = sheet(16, 16, 1, 1, (ctx) => {
+  const canvas = sheet(16, 40, 1, 1, (ctx) => {
+    ctx.fillStyle = '#d8a833';
+    ctx.fillRect(6, 10, 4, 30);
+    ctx.fillStyle = '#7a5d16';
+    ctx.fillRect(6, 10, 1, 30);
     ctx.strokeStyle = '#3a3a3a';
     ctx.lineWidth = 2.5;
     const spread = open ? 6 : 3;
     for (const side of [-1, 1]) {
       ctx.beginPath();
-      ctx.moveTo(8, 3);
-      ctx.lineTo(8 + side * spread, 9);
-      ctx.lineTo(8 + side * (spread - 2), 14);
+      ctx.moveTo(8, 12);
+      ctx.lineTo(8 + side * spread, 7);
+      ctx.lineTo(8 + side * (spread - 2), 2);
       ctx.stroke();
     }
-    ctx.fillStyle = '#d8a833';
-    ctx.beginPath();
-    ctx.arc(8, 4, 3, 0, Math.PI * 2);
-    ctx.fill();
   });
-  return { canvas, def: { file: 'placeholder', width: 16, height: 16 } };
+  return { canvas, def: { file: 'placeholder', width: 16, height: 40 } };
 }
 
 const ICON_SIZE = 32;
